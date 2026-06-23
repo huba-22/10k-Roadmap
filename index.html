@@ -4393,6 +4393,14 @@ if (!window._tooltipDismissalInstalled){
   letter-spacing:.01em;
   margin-left:2px;
 }
+/* Subsequent (non-first) mentions of a partner brand within the same task —
+   the FIRST mention is wrapped in .aff-link (clickable, underlined), every
+   mention after that just gets this lighter brass highlight so the brand
+   reads as a styled callout without dragging the eye to another link. */
+.aff-mention{
+  color:var(--gold-1);
+  font-weight:500;
+}
 /* Topic-fallback suggestion — when the AI mentions a topic (e.g. "register
    your LLC") without naming the partner tool, we append a small "→ Tailor
    Brands" inline pill. Slightly muted so it reads as guidance, not a pitch. */
@@ -4734,9 +4742,7 @@ if (!window._tooltipDismissalInstalled){
     <!-- ===== Theme picker (shown after username for new accounts) ===== -->
     <form class="login-form" id="login-form-theme" hidden>
       <div class="login-field">
-        <label class="login-label">Pick your theme</label>
-        <p class="login-hint" style="font-family:var(--sans);font-size:10.5px;letter-spacing:.02em;color:var(--smoke);line-height:1.5;margin:0 0 14px;text-align:left;">You can change this anytime in Settings.</p>
-        <div class="theme-swatches" id="onboarding-theme-swatches" style="justify-content:flex-start;gap:14px;">
+        <div class="theme-swatches" id="onboarding-theme-swatches" style="justify-content:center;gap:14px;">
           <button class="theme-swatch" data-theme="walnut" type="button" aria-label="Walnut theme">
             <span class="swatch-dot" style="background:linear-gradient(135deg,#1a140e 0%,#1a140e 50%,#a08660 50%,#a08660 100%);"></span>
             <span class="swatch-label">Walnut</span>
@@ -5091,9 +5097,6 @@ if (!window._tooltipDismissalInstalled){
               </div>
               <div id="roadmap-winding-wrap" class="roadmap-winding-wrap"></div>
               <div id="roadmap-popover" class="roadmap-popover" hidden></div>
-              <div style="text-align:center;margin-top:36px;">
-                <button class="btn-ghost btn-sm" id="restart-all">Start Over</button>
-              </div>
             </section>
 
           </div>
@@ -5283,17 +5286,7 @@ function _setLoginMode(mode){
   var resetForm     = document.getElementById('login-form-reset');
   var newpassForm   = document.getElementById('login-form-newpass');
   var usernameForm  = document.getElementById('login-form-username');
-      var _themeForm = document.getElementById('login-form-theme');
-      if (_themeForm) _themeForm.addEventListener('submit', _handleThemeSubmit);
-      // Onboarding swatches: pick-on-click; mark .selected for the chosen one
-      document.querySelectorAll('#onboarding-theme-swatches .theme-swatch').forEach(function(s){
-        s.addEventListener('click', function(){
-          document.querySelectorAll('#onboarding-theme-swatches .theme-swatch').forEach(function(o){ o.classList.remove('selected'); });
-          s.classList.add('selected');
-          // Live-preview the theme so they can see what they're choosing
-          if (typeof window._applyTheme === 'function') window._applyTheme(s.dataset.theme);
-        });
-      });
+  var themeForm     = document.getElementById('login-form-theme');
   var divider       = document.getElementById('login-divider');
   var googleBtn     = document.getElementById('login-google-btn');
   var tabsEl        = document.getElementById('login-tabs');
@@ -5308,6 +5301,7 @@ function _setLoginMode(mode){
   if (resetForm)    resetForm.hidden    = true;
   if (newpassForm)  newpassForm.hidden  = true;
   if (usernameForm) usernameForm.hidden = true;
+  if (themeForm)    themeForm.hidden    = true;
   if (divider)      divider.style.display   = 'none';
   if (googleBtn)    googleBtn.style.display = 'none';
   if (tabsEl)       tabsEl.style.display    = 'none';
@@ -5351,6 +5345,10 @@ function _setLoginMode(mode){
     if (usernameForm) usernameForm.hidden = false;
     if (title)        title.textContent = 'What should we call you?';
     if (sub)          sub.textContent   = 'This is your name in the app — what your community sees.';
+  } else if (mode === 'theme'){
+    if (themeForm) themeForm.hidden = false;
+    if (title)     title.textContent = 'Pick your theme.';
+    if (sub)       sub.textContent   = 'You can change this anytime in Settings.';
   }
 }
 
@@ -5752,6 +5750,17 @@ document.addEventListener('DOMContentLoaded', function(){
   // Username (post-OAuth onboarding)
   var usernameForm = document.getElementById('login-form-username');
   if (usernameForm) usernameForm.addEventListener('submit', _handleUsernameSubmit);
+
+  // Theme picker (post-username for new accounts)
+  var themeForm = document.getElementById('login-form-theme');
+  if (themeForm) themeForm.addEventListener('submit', _handleThemeSubmit);
+  document.querySelectorAll('#onboarding-theme-swatches .theme-swatch').forEach(function(s){
+    s.addEventListener('click', function(){
+      document.querySelectorAll('#onboarding-theme-swatches .theme-swatch').forEach(function(o){ o.classList.remove('selected'); });
+      s.classList.add('selected');
+      if (typeof window._applyTheme === 'function') window._applyTheme(s.dataset.theme);
+    });
+  });
 
   // Google
   var gbtn = document.getElementById('login-google-btn');
@@ -6174,7 +6183,16 @@ function renderForm(){
     ta.className = 'form-input';
     ta.placeholder = q.placeholder || '';
     ta.value = answers[q.id] || '';
-    ta.addEventListener('input', () => { answers[q.id] = ta.value; if (typeof saveRoadmap === 'function') saveRoadmap(); });
+    ta.addEventListener('input', () => {
+      answers[q.id] = ta.value;
+      // Live-update the brand identity bar on every keystroke when the user
+      // types their business name during the business-setup questionnaire.
+      if (q.id === 'biz_name'){
+        State.businessName = ta.value;
+        if (typeof window._updateBrandIdentity === 'function') window._updateBrandIdentity();
+      }
+      if (typeof saveRoadmap === 'function') saveRoadmap();
+    });
     qEl.appendChild(ta);
     setTimeout(() => ta.focus(), 80);
   } else if (q.type === 'choice'){
@@ -6241,10 +6259,14 @@ function finishCurrentStep(){
   const step = STEPS[State.currentStepId];
 
   if (State.currentStepId === 'selling'){
-    // Analyze answers and route
-    showLoader(() => {
-      analyzeAndRoute();
-    });
+    // Show loader while we classify via AI + run heuristic fallback.
+    // The 1.6s artificial delay is gone — the loader now stays visible
+    // for the real ~3-5s the AI classification takes.
+    formCard.hidden = true;
+    analysisCard.hidden = true;
+    loaderCard.hidden = false;
+    loaderCard.scrollIntoView({ behavior:'smooth', block:'start' });
+    analyzeAndRoute(); // async, fires the AI call internally then renders
     return;
   }
 
@@ -6266,8 +6288,65 @@ function showLoader(thenFn){
   setTimeout(thenFn, 1600);
 }
 
-function analyzeAndRoute(){
+// AI-based classifier — sends selling answers to Sonnet and gets back
+// { model, track, reasoning }. Replaces the brittle keyword-matching that
+// missed obvious cases like "garage door services" (no keyword hit → defaulted
+// wrongly to product/volume). Small call, ~$0.005, ~3-5s wall-clock.
+async function _classifyBusinessAI(a, branch){
+  if (!ProxyURL.has()) return null;
+  var summary = '';
+  if (branch === 'yes'){
+    summary += 'What they sell:\n' + (a.what_you_do || '—') + '\n\n';
+    summary += 'Who they serve:\n' + (a.who_serving || '—') + '\n\n';
+    summary += 'Revenue stage:\n' + (a.good_month || '—') + '\n\n';
+    summary += 'How people currently find them:\n' + (a.how_found || '—') + '\n';
+  } else {
+    summary += 'What energizes them:\n' + (a.passion || '—') + '\n\n';
+    summary += 'What people come to them for:\n' + (a.notice || '—') + '\n\n';
+    summary += 'Any past paid work:\n' + (a.ever_paid || '—') + '\n\n';
+    summary += 'Preferred way of working:\n' + (a.work_style || '—') + '\n';
+  }
+
+  var system =
+    'You are classifying a business to route the user to the correct $10K roadmap track. Read their answers, infer what kind of business this is, then output strict JSON.\n\n' +
+    'MODEL — what type of business:\n' +
+    '  • "product" — sells a thing (physical: apparel/jewelry/merch/skincare/supplements; digital: courses/ebooks/templates/SaaS/apps/printables/downloads; print-on-demand; physical brand)\n' +
+    '  • "service" — performs work for clients (consulting, coaching, agency, freelance, done-for-you; local trades like garage doors, epoxy, plumbing, electrical, HVAC, roofing, landscaping, painting, flooring, cleaning, handyman, installation, repair; contractor work; retainer engagements)\n' +
+    '  • "community" — monetizes a paid community/membership where access to the community itself is the product (Skool, paid Discord, paid newsletter community, mastermind, paid group)\n\n' +
+    'TRACK — how they hit $10K:\n' +
+    '  • "single" — fewer big sales at $500+ each: consulting engagements, installation jobs, coaching packages, agency retainers, contractor work, premium memberships, high-ticket products. Local trades and contractors almost always go here because per-job price is high and per-week capacity is limited.\n' +
+    '  • "volume" — many small sales under ~$200 each: physical goods, digital downloads, courses, low-tier subscriptions, low-priced memberships.\n\n' +
+    'IMPORTANT — local service businesses (any home/business trade that performs installation/repair/maintenance work at a customer site) are ALWAYS "service" model + "single" track. Examples: garage doors, epoxy floors, lawn care, painters, plumbers, electricians, roofers, HVAC, cleaning, handyman.\n\n' +
+    'Output ONLY this JSON, no markdown, no preamble:\n' +
+    '{\n' +
+    '  "model": "product" | "service" | "community",\n' +
+    '  "track": "single" | "volume",\n' +
+    '  "reasoning": "one short sentence explaining the call"\n' +
+    '}';
+
+  var user = 'USER ANSWERS:\n\n' + summary + '\n\nClassify this business now.';
+
+  try {
+    var resp = await Promise.race([
+      callClaude(system, user, 300),
+      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('TIMEOUT:classifier')); }, 15000); })
+    ]);
+    var parsed = extractAndParseJSON(resp);
+    if (!parsed || !parsed.model || !parsed.track) return null;
+    var validModels = { product:1, service:1, community:1 };
+    var validTracks = { single:1, volume:1 };
+    if (!validModels[parsed.model] || !validTracks[parsed.track]) return null;
+    return { model: parsed.model, track: parsed.track, reasoning: parsed.reasoning || '' };
+  } catch (e){
+    console.warn('[classify] AI classifier failed, falling back to keyword heuristic:', e && e.message);
+    return null;
+  }
+}
+
+async function analyzeAndRoute(){
   const a = getStepAnswers('selling');
+
+  // ---- Keyword heuristic (kept as fallback if AI classifier fails) ----
   let volumeScore = 0;
   let singleScore = 0;
   let model = 'product';
@@ -6276,32 +6355,26 @@ function analyzeAndRoute(){
     const what  = (a.what_you_do || '').toLowerCase();
     const month = (a.good_month   || '').toLowerCase();
 
-    const singleK = ['consult','coach','agency','done for you','done-for-you','1-on-1','1:1','one on one','client','high-ticket','high ticket','retainer','strategic','advisor','custom','bespoke','contractor','freelanc'];
+    const singleK = ['consult','coach','agency','done for you','done-for-you','1-on-1','1:1','one on one','client','high-ticket','high ticket','retainer','strategic','advisor','custom','bespoke','contractor','freelanc','install','repair','service','services','plumb','electric','hvac','roof','landscape','lawn','cleaning','paint','floor','garage door','epoxy','tile','handyman','trade'];
     const volumeK = ['product','course','ebook','e-book','merch','store','shop','digital','template','membership','community','subscription','app','software','saas','print on demand','dropship','physical','sell to many','low ticket','low-ticket'];
 
     singleK.forEach(k => { if (what.includes(k)) singleScore += 2; });
     volumeK.forEach(k => { if (what.includes(k)) volumeScore += 2; });
 
-    // Revenue heuristic: big single tickets = single sale; many small = volume
     if (/\$[1-9][,]?\d{3,}/.test(month) && !/[1-9]\d{2,}\s*(sales|customers|orders)/.test(month)) singleScore += 1;
     if (/(many|hundreds|thousands)\s+(of\s+)?(sales|customers|orders|buyers)/.test(month)) volumeScore += 1;
 
-    // Determine model — PRODUCT signals override mere community mentions.
-    // A user can sell products AND promote them inside a community; that
-    // doesn't make the community their business model. We only flag the
-    // community avenue when the community itself is what's being sold.
     if (singleScore > volumeScore + 1){
       model = 'service';
-    } else if (/\b(apparel|clothing|tee|t-?shirts?|hoodie|sweatshirt|hat|cap|jacket|merch(andise)?|jewelry|accessor(y|ies)|store|shop|brand of|product line|sell(ing)? products?|skincare|supplement|candle|sticker|poster|drop\s?ship|print[\s-]on[\s-]demand|physical product|product brand|clothing brand|apparel brand)\b/i.test(what)){
+    } else if (/\b(apparel|clothing|tee|t-?shirts?|hoodie|sweatshirt|hat|cap|jacket|merch(andise)?|jewelry|accessor(y|ies)|brand of|product line|sell(ing)? products?|skincare|supplement|candle|sticker|poster|drop\s?ship|print[\s-]on[\s-]demand|physical product|product brand|clothing brand|apparel brand)\b/i.test(what)){
       model = 'product';
     } else if (/\b(course(s)?|ebook(s)?|e-book(s)?|digital (product|template|download)|template (shop|business|pack)|paid newsletter|app|saas|software)\b/i.test(what)){
       model = 'product';
     } else if (/\b(paid community|paid membership|membership business|community is my business|run a paid community|membership[\s-]based business|community[\s-]led business|build a paid community|membership site|community model)\b/i.test(what)){
       model = 'community';
+    } else if (/\b(garage door|epoxy|plumb|electric(al|ian)|hvac|roof(ing)?|landscape|landscaping|lawn|cleaning|janitorial|paint(ing|er)|floor(ing)?|tile|window|gutter|fence|deck|concrete|driveway|locksmith|handy(man)?|install(ation|er)?|repair|trade|contractor|sub-?contractor|local service|home service|residential service)\b/i.test(what)){
+      model = 'service';
     } else {
-      // Mentioned community/Skool/membership in passing (as a promotion
-      // channel, not as the business itself) — default to product on the
-      // volume track. Don't auto-route to the community avenue.
       model = 'product';
     }
 
@@ -6312,9 +6385,22 @@ function analyzeAndRoute(){
     else if (work.startsWith('Building a community')) { volumeScore = 4; model = 'community'; }
   }
 
-  const track = singleScore > volumeScore ? 'single' : 'volume';
-  State.assignedTrack = track;
+  let track = singleScore > volumeScore ? 'single' : 'volume';
+  // Heuristic safety: service model with no explicit volume signal defaults to single.
+  if (model === 'service' && volumeScore === 0) track = 'single';
 
+  // ---- AI classifier (primary) — overrides heuristic when it returns valid output ----
+  console.info('[classify] firing AI classifier...');
+  var aiResult = await _classifyBusinessAI(a, State.sellingBranch);
+  if (aiResult){
+    console.info('[classify] AI:', aiResult.model + '/' + aiResult.track + ' — ' + aiResult.reasoning);
+    model = aiResult.model;
+    track = aiResult.track;
+  } else {
+    console.info('[classify] keyword fallback:', model + '/' + track);
+  }
+
+  State.assignedTrack = track;
   renderAnalysis(track, model);
 }
 
@@ -6579,15 +6665,9 @@ async function _doStartOver(){
   }
 }
 
-document.getElementById('restart-all').addEventListener('click', function(){
-  var ok = window.confirm(
-    'Start over from the beginning?\n\n' +
-    'This will permanently erase your saved roadmap — your offer, tasks, milestones, and all answers will be wiped.\n\n' +
-    'Your account login and username are kept. You\'ll start fresh at the first question.'
-  );
-  if (!ok) return;
-  _doStartOver();
-});
+// Dashboard "Start Over" button removed — was running up token spend when users
+// hit it accidentally. _doStartOver() is still called from the build-failure
+// recovery screen and any other internal recovery path.
 
 
 
@@ -9621,312 +9701,10 @@ function _getTaskArr(kind){
   return null;
 }
 
-/* ---- Per-tab renderers ---- */
-
-// Detects whether the saved dashboard is missing scaling/tasks/roadmap
-// (i.e. was generated before those sections existed) and fires backfill
-// API calls to populate them. Saves to user_roadmaps when done.
-//
-// Shows REAL per-call progress so the user can see exactly what is in flight.
-async function _ensureDashboardComplete(){
-  if (State._backfillInFlight){
-    // Stuck-flag recovery — if it has been set for over 2 minutes, something hung
-    var now = Date.now();
-    if (State._backfillStartedAt && (now - State._backfillStartedAt) > 120000){
-      console.warn('[backfill] Stuck flag detected — resetting');
-      State._backfillInFlight = false;
-    } else {
-      console.log('[backfill] Skipping — already in flight');
-      return false;
-    }
-  }
-  State._backfillStartedAt = Date.now();
-  var d = State.dashboard;
-  if (!d || !d.offer){
-    console.log('[backfill] No dashboard.offer — nothing to backfill');
-    return false;
-  }
-
-  // Detect what's missing
-  var hasScalingV3 = false;
-  if (d.scaling && d.scaling.milestones && d.scaling.milestones.length > 0){
-    var anyHasTasks = d.scaling.milestones.slice(1).some(function(m){
-      return Array.isArray(m.tasks) && m.tasks.length > 0;
-    });
-    hasScalingV3 = anyHasTasks;
-  }
-  if (hasScalingV3){
-    console.log('[backfill] Scaling already complete — nothing to do');
-    return false;
-  }
-
-  State._backfillInFlight = true;
-  console.log('[backfill] STARTING — track:', State.assignedTrack);
-
-  var wrap = document.getElementById('scaling-graph-wrap');
-  var t0 = Date.now();
-  // Simple logo + cycling message loader (no status panel)
-  var sectionStatus = { structure: 'pending', m1: 'pending', m2: 'pending', m3: 'pending', m4: 'pending', m5: 'pending', m6: 'pending' };
-  var cyclingMsgs = [
-    'Reading your answers&hellip;',
-    'Drafting your milestone structure&hellip;',
-    'Writing tasks a beginner can follow&hellip;',
-    'Pacing the journey for real-world growth&hellip;',
-    'Almost there&hellip;'
-  ];
-  var cIdx = 0;
-  function renderStatus(){
-    if (!wrap) return;
-    var elapsed = Math.round((Date.now() - t0)/1000);
-    var html = '<div style="max-width:520px;margin:0 auto;padding:80px 24px;text-align:center;">';
-    html += '<img id="_rs-orb" class="loader-orb" alt="" style="width:72px;height:72px;margin:0 auto 28px;display:block;"/>';
-    html += '<p style="color:var(--cream);font-family:var(--serif-body);font-size:18px;font-style:italic;line-height:1.5;margin-bottom:18px;">' + cyclingMsgs[cIdx] + '</p>';
-    html += '<p style="color:var(--smoke);font-family:var(--sans);font-size:11px;letter-spacing:.22em;text-transform:uppercase;">Elapsed: ' + elapsed + 's</p>';
-    html += '</div>';
-    wrap.innerHTML = html;
-    var logoSrc = (document.querySelector('#login-crest') || document.querySelector('.intro-crest') || document.querySelector('#brand-bar img'));
-    var orb = document.getElementById('_rs-orb');
-    if (logoSrc && orb && logoSrc.src) orb.src = logoSrc.src;
-  }
-  renderStatus();
-  var statusTimer = setInterval(function(){
-    cIdx = (cIdx + 1) % cyclingMsgs.length;
-    renderStatus();
-  }, 3500);
-
-  function showError(msg){
-    clearInterval(statusTimer);
-    State._backfillInFlight = false;
-    if (!wrap) return;
-    var html = '<div style="text-align:center;padding:48px 24px;max-width:520px;margin:0 auto;font-family:var(--sans);">';
-    html += '<div style="font-family:var(--serif-display);font-size:20px;color:var(--gold-1);margin-bottom:12px;">Generation failed</div>';
-    html += '<div style="color:var(--cream);font-size:14px;line-height:1.55;margin-bottom:24px;">' + escapeHtml(msg) + '</div>';
-    html += '<button class="btn-gold btn-sm" id="_rs-retry" type="button">Try again</button>';
-    html += ' &nbsp; <button class="btn-ghost btn-sm" id="_rs-restart" type="button">Start Over</button>';
-    html += '</div>';
-    wrap.innerHTML = html;
-    var rb = document.getElementById('_rs-retry');
-    if (rb) rb.addEventListener('click', function(){ _renderDashboardTab(); });
-    var sb = document.getElementById('_rs-restart');
-    if (sb) sb.addEventListener('click', function(){
-      var rba = document.getElementById('restart-all');
-      if (rba) rba.click();
-    });
-  }
-
-  // Build context
-  var sellingAnswers = State.answers.selling || {};
-  var branch = State.sellingBranch;
-  var aiQuestions = State.aiQuestions || [];
-  var aiAnswers = State.answers['ai-volume'] || {};
-  var track = State.assignedTrack === 'single' ? 'single' : 'volume';
-
-  var summary = '';
-  if (branch === 'yes'){
-    summary += 'What they sell:\n' + (sellingAnswers.what_you_do || '—') + '\n\n';
-    summary += 'Who they serve:\n' + (sellingAnswers.who_serving || '—') + '\n\n';
-    summary += 'Revenue stage:\n' + (sellingAnswers.good_month || '—') + '\n\n';
-    summary += 'How people currently find them:\n' + (sellingAnswers.how_found || '—') + '\n';
-  } else {
-    summary += 'What energizes them:\n' + (sellingAnswers.passion || '—') + '\n\n';
-    summary += 'What people come to them for:\n' + (sellingAnswers.notice || '—') + '\n\n';
-    summary += 'Any past paid work:\n' + (sellingAnswers.ever_paid || '—') + '\n\n';
-    summary += 'Preferred way of working:\n' + (sellingAnswers.work_style || '—') + '\n';
-  }
-  var qaList = aiQuestions.map(function(q){
-    var a = aiAnswers[q.id];
-    if (Array.isArray(a)) a = a.join(', ');
-    return 'Q: ' + q.question + '\nA: ' + (a || '—');
-  }).join('\n\n');
-  var existingCtx = '';
-  if (d.offer) existingCtx += '\n\nEXISTING OFFER:\n' + JSON.stringify(d.offer);
-  if (d.pricing) existingCtx += '\n\nEXISTING PRICING:\n' + JSON.stringify(d.pricing);
-  if (d.buyer) existingCtx += '\n\nEXISTING BUYER:\n' + JSON.stringify(d.buyer);
-  var contextBlock = 'CONTEXT — From "What You\'re Selling":\n\n' + summary +
-                     _buildBusinessSetupContext() +
-                     '\n\nTHEIR PERSONALIZED STRATEGY ANSWERS (' + aiQuestions.length + ' total):\n\n' + qaList + existingCtx;
-
-  var SCALING_STRUCTURE_SCHEMA = '{\n  "goalRevenue": 10000,\n  "stretchRevenue": 30000,\n  "milestones": [\n    { "day": 0,   "revenue": 0,     "label": "Start",           "meaning": "Plain-English sentence." },\n    { "day": 10,  "revenue": 750,   "label": "Foundation set",  "meaning": "..." },\n    { "day": 21,  "revenue": 2000,  "label": "First sales",     "meaning": "..." },\n    { "day": 45,  "revenue": 5000,  "label": "Momentum",        "meaning": "..." },\n    { "day": 70,  "revenue": 7500,  "label": "Halfway",         "meaning": "..." },\n    { "day": 90,  "revenue": 10000, "label": "Goal hit",        "meaning": "..." },\n    { "day": 150, "revenue": 30000, "label": "Stretch",         "meaning": "..." }\n  ]\n}';
-  var TASKS_FOR_MILESTONE_SCHEMA = '{ "tasks": [ { "id": "kebab-id", "title": "4-6 word plain title", "description": "one sentence", "steps": ["step 1", "step 2", "step 3"] } ] }';
-  var SCALING_STRUCTURE_HINT = 'Generate the SCALING JOURNEY STRUCTURE — exactly 7 milestones from $0 (Day 0) past their stated $10K goal.\n\n' +
-    'CRITICAL: milestones must follow REAL-WORLD BUSINESS SEQUENCE for THIS specific business model. Think like a founder, not a textbook:\n' +
-    '- Milestone 1 (foundation): What MUST exist before they can sell ANYTHING? Legal entity (if missing), brand/identity, the actual offer being deliverable, payment infrastructure. NOT marketing yet.\n' +
-    '- Milestone 2 (first paying): The EARLIEST way to get the first paying customers FOR THIS BUSINESS. For service/coaching/community businesses, this is almost always warm outreach + referrals from existing network — that IS the launch mechanism, not a later phase. For products, this is first organic + warm DMs.\n' +
-    '- Milestone 3 (momentum): Repeatable consistency — same channel, predictable volume.\n' +
-    '- Milestone 4 (halfway): Optimization of the working channel — better content cadence, better conversion, retention.\n' +
-    '- Milestone 5 (goal hit): The $10K crossing — small expansion of channels or first hire / first automation that frees them.\n' +
-    '- Milestone 6 (scale): New channels, systems, paid traffic if relevant, affiliate/partner programs.\n' +
-    '- Milestone 7 (premium / stretch): Higher pricing, premium positioning, or new revenue streams that take them well past their stated goal.\n\n' +
-    'For SERVICE/COACHING/COMMUNITY businesses: referrals and word-of-mouth are foundational growth — put referral mechanics at milestone 2 or 3, NEVER milestone 4+.\n' +
-    'For PRODUCT businesses: first organic content + warm sales at milestone 2; paid ads/affiliates at milestone 4.\n\n' +
-    'NO tasks — just milestone shape: day, revenue, label (3-5 words plain English), meaning (one plain-English sentence about what reaching it actually means in their life or business). Pace realistic.';
-  function TASKS_HINT(milestone, milestoneIdx){
-    // Sequencing rule per milestone for surfacing Business Setup gaps:
-    //   M1 (foundation): entity gap, offer-clarity gap
-    //   M2 (first sales): website gap (only if missing/in-progress)
-    //   M3 (momentum):   social-media gap, referral-program gap
-    //   M4 (halfway):    follow-up-system gap
-    //   M5 (goal hit):   keep gap tasks light — polish only
-    //   M6 (scale):      revisit any gap still open and turn it into a system
-    //   M7 (stretch):    no setup gaps — purely growth
-    var gapRule = '';
-    if (milestoneIdx === 1) {
-      gapRule = 'GAP RULE for this milestone: If their Business Setup shows NO entity (or unsure) OR unclear offer/pricing, those gaps belong here. ONE gap-task max in this milestone — don\'t bunch.';
-    } else if (milestoneIdx === 2) {
-      gapRule = 'GAP RULE for this milestone: If their Business Setup shows NO website (or one that isn\'t converting), that gap belongs here. ONE gap-task max.';
-    } else if (milestoneIdx === 3) {
-      gapRule = 'GAP RULE for this milestone: If their Business Setup shows NO referral program OR NO social media strategy, surface ONE of those here (not both). ONE gap-task max.';
-    } else if (milestoneIdx === 4) {
-      gapRule = 'GAP RULE for this milestone: If their Business Setup shows NO follow-up system AND they have leads coming in, surface that gap here as automation. ONE gap-task max.';
-    } else if (milestoneIdx === 5) {
-      gapRule = 'GAP RULE for this milestone: They have hit the goal. Use gap-tasks sparingly — only the most impactful remaining gap, framed as a polish/optimization.';
-    } else if (milestoneIdx === 6) {
-      gapRule = 'GAP RULE for this milestone: Any remaining open gap from Business Setup becomes a systemization task here (turning ad-hoc into automated).';
-    } else {
-      gapRule = 'GAP RULE for this milestone: NO setup gaps here — pure growth tasks only.';
-    }
-    return 'Generate 3 OR 4 TASKS (choose whichever number tells the cleanest story for this milestone — do NOT pad to 4 if 3 captures it) that a beginner must complete to REACH this milestone.\n' +
-      'MILESTONE: "' + milestone.label + '" — ' + (milestone.meaning || '') + '\n' +
-      'TARGET: $' + milestone.revenue + ' by day ' + milestone.day + '.\n\n' +
-      'ORDERING — CRITICAL:\n' +
-      'Output the tasks in the EXACT order a beginner must execute them, first → last. Task 1 is the absolute first action they take when they sit down to work on this milestone; the last task is what they finish right before crossing into the next milestone. The reader should be able to work top-down without flipping back.\n' +
-      'WITHIN each task, the "steps" array is also first → last action — they should follow steps 1, 2, 3 in order without skipping.\n\n' +
-      'BUSINESS SETUP — What the user already has vs lacks:\n' +
-      'Look at the BUSINESS SETUP section in the CONTEXT block above. Their answers tell you exactly what to skip and what to fix.\n' +
-      '- If they said "Yes" to having an LLC → DO NOT include any entity-formation task. Anywhere.\n' +
-      '- If they said "Yes" to having a website that converts → DO NOT include a website-building task.\n' +
-      '- If they said "Yes" to having an active referral program → DO NOT include a referral-setup task.\n' +
-      '- Same for social media strategy, follow-up system, offer/pricing clarity.\n' +
-      'For each thing they DON\'T have but NEED, surface it as a gap-task in the RIGHT milestone (see GAP RULE below). Never put more than ONE gap-task in a single milestone — the user should never see all their gaps at once.\n\n' +
-      'TOOL PREFERENCES — Always recommend OUR partner tools by name when the task fits, and NEVER name a competitor:\n  • LLC / business entity formation / EIN / registered agent → "Tailor Brands" (handles LLC filing AND brand kit AND EIN in one package).\n  • Website / landing page / sales page / storefront / online store / link-in-bio → "HighLevel" (all-in-one site + funnels + CRM).\n  • CRM / sales pipeline / email automation / SMS / drip sequence / nurture flow / pipeline / funnel automation → "HighLevel".\n  • Social media scheduling / posting calendar / reputation / review requests / appointment booking → "HighLevel" (includes social planner, review automation, calendar booking).\n  • Community platform / paid membership / online course / course delivery → "Skool".\n  • Code / AI coding assistant → "Claude Code".\n\n' +
-      'STRICTLY FORBIDDEN BRANDS — These names MUST NEVER appear in your output, in steps, titles, or descriptions. If you would naturally reach for one, substitute the partner tool above:\n' +
-      '  • Formation: Northwest Registered Agent, ZenBusiness, LegalZoom, Inc Authority, Rocket Lawyer, Swyft Filings, MyCompanyWorks, BetterLegal, Harbor Compliance, Stripe Atlas, Firstbase, Doola, Mercury Atlas, IncFile, CorpNet, MyCorporation\n' +
-      '  • Website / storefront / landing: Shopify, Squarespace, Wix, Webflow, Carrd, Leadpages, Unbounce, Instapage, Swipe Pages, ConvertFlow, Landingi, Showit, Framer, Tilda, Strikingly, Big Cartel, Ecwid, BigCommerce, Volusion, Sellfy, WordPress, Linktree, Beacons.ai, Bio.fm, Lnk.bio, Vercel, Netlify\n' +
-      '  • Funnels / Course delivery: ClickFunnels, Kajabi\n' +
-      '  • Email / Newsletters: ConvertKit, Mailchimp, ActiveCampaign, AWeber, GetResponse, Brevo, Sendinblue, Constant Contact, MailerLite, EmailOctopus, Customer.io, Beehiiv, Substack\n' +
-      '  • CRM / Sales pipeline: HubSpot, Pipedrive, Keap, Infusionsoft, Salesforce, Zoho, Copper CRM, Insightly, Freshsales, EngageBay, Less Annoying CRM, Capsule CRM, Nutshell CRM\n' +
-      '  • SMS / Texting: Klaviyo, Twilio, Sakari, EZ Texting, SimpleTexting, Postscript, Attentive, SlickText, TextMagic, ClickSend\n' +
-      '  • Webinar / Video: WebinarJam, EverWebinar, Demio\n' +
-      '  • Social scheduling: Buffer, Hootsuite, Sprout Social, SocialPilot, Loomly, MeetEdgar, Metricool\n' +
-      '  • Reputation / Reviews: Birdeye, Podium, NiceJob\n' +
-      '  • Booking: Acuity Scheduling, Square Appointments, Setmore, Schedulista\n' +
-      '  • Forms: Typeform, JotForm\n' +
-      '  • Community / Courses / Membership: Circle, Circle.so, Mighty Networks, Mighty Pro, Teachable, Thinkific, Podia, Memberspace, Memberstack, Membervault, Heartbeat.chat, Bettermode, Hivebrite, Khoros, AccessAlly, Wishlist Member, Heights Platform\n' +
-      '  • AI coding assistants: Cursor, Cursor IDE, GitHub Copilot, Replit, Replit Ghostwriter, v0, v0.dev, Lovable, Lovable.dev, Bolt, Bolt.new, Codeium, Tabnine, Windsurf Editor\n' +
-      'These competitors are FORBIDDEN. We have no affiliate relationship with them, and naming them costs the business owner money AND loses commission revenue. If the use case fits one of OUR partner tools above, use OUR partner tool by name. Period.\n\n' +
-      'NEUTRAL TOOLS THAT ARE ALLOWED — only when no partner tool legitimately fits the use case:\n' +
-      '  • Payment processing → Stripe\n' +
-      '  • Calendar booking → Calendly (only if HighLevel calendars are not in this task; HighLevel handles booking if it\'s already deployed)\n' +
-      '  • Tax filing / accounting → QuickBooks, FreshBooks, Xero (neutral)\n' +
-      '  • Source of truth on tax / legal info → IRS, Secretary of State (government, never an affiliate concern)\n\n' +
-      'EIN / TAX-ID SPECIAL RULE:\n' +
-      'When a task includes BOTH an LLC-formation step AND an EIN step, DO NOT direct the user to irs.gov, the IRS website, or a separate Form SS-4. Tailor Brands files the EIN automatically as part of the LLC package. Phrase the EIN step explicitly as flowing THROUGH Tailor Brands — example: "Receive your EIN automatically through Tailor Brands as part of your LLC filing — no separate IRS form needed." This means Tailor Brands legitimately appears in TWO different steps of the same task (LLC formation + EIN issuance). That is correct; do not avoid the repeat.\n\n' +
-      gapRule + '\n\n' +
-      'EACH TASK MUST HAVE:\n' +
-      '- title: 4-6 words plain English (e.g. "Publish your service page" — NOT "Optimize landing page funnel")\n' +
-      '- description: ONE sentence in plain language explaining what the task IS\n' +
-      '- steps: 3-5 specific actions a complete beginner can follow exactly. Name actual tools by name. PREFER our partner tools (Tailor Brands, HighLevel, Skool, Claude Code) for the use cases listed under TOOL PREFERENCES above. For payment processing use Stripe; for calendar booking use Calendly. Include any quick time estimates if helpful.\n\n' +
-      'NO JARGON. NO "optimize / leverage / monetize / stack / funnel / scale / activate".\n' +
-      'Tasks must be SPECIFIC to their exact niche, this milestone\'s purpose, AND what their Business Setup answers say they have or don\'t have.\n' +
-      'Output ONLY the JSON object with tasks array. Nothing else.';
-  }
-  var trackLabel = track === 'single' ? 'High-Ticket / Single Sale Track' : 'Volume Track';
-
-  async function genOne(name, schema, hint){
-    var system = 'You are a business strategist building a personalized $10K ' + trackLabel + ' roadmap. ' +
-                 'Generate ONLY the "' + name + '" section. Be SPECIFIC — reference their exact niche by name. Use REAL numbers. ' +
-                 '\n\n' + (typeof MODEL_RECOGNITION !== 'undefined' ? MODEL_RECOGNITION : '') + '\n\n' +
-                 hint + ' ' +
-                 '\n\nOUTPUT: Return ONLY a valid JSON object matching this schema. No markdown fences, no explanation:\n' + schema;
-    var user = contextBlock + '\n\nGenerate the "' + name + '" JSON object now.';
-    var resp = await callClaude(system, user, 1500);
-    return extractAndParseJSON(resp);
-  }
-  function withTimeout(promise, ms){
-    return Promise.race([
-      promise,
-      new Promise(function(_, reject){ setTimeout(function(){ reject(new Error('TIMEOUT')); }, ms); })
-    ]);
-  }
-
-  try {
-    // STAGE 1: structure
-    console.log('[backfill] Stage 1: requesting milestone structure...');
-    sectionStatus.structure = 'generating';
-    renderStatus();
-    var structure = await withTimeout(genOne('scaling-structure', SCALING_STRUCTURE_SCHEMA, SCALING_STRUCTURE_HINT), 30000);
-    if (!structure || !structure.milestones || !structure.milestones.length){
-      throw new Error('Empty milestone structure returned.');
-    }
-    sectionStatus.structure = 'done';
-    console.log('[backfill] Stage 1 done in ' + Math.round((Date.now()-t0)/1000) + 's. Milestones:', structure.milestones.length);
-    State.dashboard.scaling = structure;
-    if (typeof saveRoadmap === 'function') saveRoadmap();
-    // Don't render the graph mid-flight — it overwrites the status panel.
-    // Final render happens after Stage 2 completes.
-    renderStatus();
-
-    // STAGE 2: tasks per milestone, parallel
-    console.log('[backfill] Stage 2: requesting tasks for each milestone in parallel...');
-    var keys = ['m1','m2','m3','m4','m5','m6','m7','m8','m9'];  // cover any reasonable number of milestones
-    var taskPromises = structure.milestones.slice(1).map(function(m, idx){
-      var key = keys[idx];
-      var milestoneIdx = idx + 1;
-      sectionStatus[key] = 'generating';
-      return withTimeout(genOne('milestone-' + milestoneIdx + '-tasks', TASKS_FOR_MILESTONE_SCHEMA, TASKS_HINT(m, milestoneIdx)), 45000)
-        .then(function(res){
-          var tasks = (res && res.tasks) || [];
-          sectionStatus[key] = 'done';
-          console.log('[backfill] M' + milestoneIdx + ' tasks done (' + tasks.length + ')');
-          // Save and re-render as each completes
-          var ms = State.dashboard.scaling.milestones[milestoneIdx];
-          if (ms){
-            ms.tasks = tasks.map(function(t){
-              if (typeof t.done === 'undefined') t.done = false;
-              if (!t.id) t.id = 'task-' + milestoneIdx + '-' + Math.random().toString(36).slice(2,8);
-              return t;
-            });
-          }
-          if (typeof saveRoadmap === 'function') saveRoadmap();
-          return { idx: milestoneIdx, tasks: tasks };
-        })
-        .catch(function(err){
-          sectionStatus[key] = 'failed';
-          console.warn('[backfill] M' + milestoneIdx + ' FAILED:', err);
-          return { idx: milestoneIdx, tasks: [], error: err };
-        });
-    });
-    renderStatus();
-
-    await Promise.all(taskPromises);
-    clearInterval(statusTimer);
-
-    // Validate: at least SOME tasks must have generated
-    var totalTasks = State.dashboard.scaling.milestones.reduce(function(sum, m){
-      return sum + ((m.tasks || []).length);
-    }, 0);
-    console.log('[backfill] Total tasks generated:', totalTasks);
-    if (totalTasks === 0){
-      State._backfillInFlight = false;
-      throw new Error('All task generation calls returned empty — likely a model issue. Try again.');
-    }
-
-    State._backfillInFlight = false;
-    console.log('[backfill] COMPLETE in ' + Math.round((Date.now()-t0)/1000) + 's');
-
-    // Final render
-    if (typeof _renderDashboardTabContent === 'function') _renderDashboardTabContent();
-    return true;
-  } catch (e){
-    console.error('[backfill] FAILED at structure stage:', e);
-    var isTimeout = e && e.message === 'TIMEOUT';
-    var msg = isTimeout
-      ? 'The AI took longer than 20 seconds to return the milestone structure. This usually means the Supabase Edge Function is throttled or Anthropic is slow. Try again — it usually works on the second attempt.'
-      : (e.message || 'Unknown error contacting the AI.');
-    showError(msg);
-    return false;
-  }
-}
+// _ensureDashboardComplete REMOVED — was a separate backfill path that used
+// the OLD per-milestone parallel architecture (no dedup, no entity-formation
+// standardization). Replaced by direct calls to finishAITrack from
+// _renderDashboardTab CASE 3, so the same dedup + standardization rules apply.
 
 function _renderDashboardTabContent(){
   _renderScalingGraph();
@@ -10014,9 +9792,11 @@ var AFFILIATES = [
   { match: /\bGHL\b/g,                url: 'https://huba.academy/highlevel',         note: '' },
   // Skool
   { match: /\bSkool\b/g,              url: 'https://huba.academy/skool',             note: '14-day free trial' },
-  // Tailor Brands — allowed twice per task so it can appear on BOTH the
-  // LLC-filing step and the EIN step (Tailor Brands handles both as one package).
-  { match: /\bTailor\s+Brands\b/g,    url: 'https://huba.academy/tailorbrands',      note: 'discount via link', maxPerTask: 2 },
+  // Tailor Brands — capped at 1 link per task. The AI prompt already tells
+  // it to combine LLC + EIN into a single Tailor Brands step ("Receive your
+  // EIN through Tailor Brands as part of the LLC package"), so a second
+  // separate link is now spam, not signal.
+  { match: /\bTailor\s+Brands\b/g,    url: 'https://huba.academy/tailorbrands',      note: 'save 35%' },
   // RYZE Coffee
   { match: /\bRYZE\s+Coffee\b/g,      url: 'https://huba.academy/ryze',              note: '' },
   { match: /\bRYZE\b/g,               url: 'https://huba.academy/ryze',              note: '' },
@@ -10205,15 +9985,34 @@ function _injectAffiliateLinks(escapedText, sharedSeen){
   // Skip if the step already contains an anchor tag (don't double-link)
   if (escapedText.indexOf('<a ') !== -1) return escapedText;
   // sharedSeen is passed across all steps of a single TASK. We count uses so
-  // partners with maxPerTask > 1 (e.g. Tailor Brands) can legitimately appear
-  // on multiple steps of the same task. Default cap is 1.
+  // partners with maxPerTask > 1 can legitimately appear multiple times.
+  // Default cap is 1.
+  //
+  // Subsequent mentions of the same partner — within the same step OR in
+  // later steps once the cap has been hit — are NOT linked again. Instead
+  // they get wrapped in <span class="aff-mention"> so they read as styled
+  // brass-color brand mentions instead of plain text. The link itself stays
+  // at the first mention only, which is what the user wants: one link per
+  // partner per task, with every subsequent mention visually highlighted.
   var seen = sharedSeen || {};
   AFFILIATES.forEach(function(a){
     var max = a.maxPerTask || 1;
-    if ((seen[a.url] || 0) >= max) return;
+    var alreadyAtCap = (seen[a.url] || 0) >= max;
+    if (alreadyAtCap){
+      // Cap reached in a prior step. Wrap every plain occurrence in this
+      // step as a styled mention so it pops visually without linking again.
+      escapedText = escapedText.replace(a.match, function(matched){
+        return '<span class="aff-mention">' + matched + '</span>';
+      });
+      return;
+    }
     var didReplace = false;
     escapedText = escapedText.replace(a.match, function(matched){
-      if (didReplace) return matched;
+      if (didReplace){
+        // Second+ occurrence in the SAME step — already used our one link
+        // budget on the first occurrence above. Highlight, don't link.
+        return '<span class="aff-mention">' + matched + '</span>';
+      }
       didReplace = true;
       seen[a.url] = (seen[a.url] || 0) + 1;
       var noteHtml = a.note ? ' <span class="aff-note">(' + a.note + ')</span>' : '';
@@ -10234,13 +10033,12 @@ var AFFILIATE_TOPICS = [
   {
     // Business entity formation → Tailor Brands.
     // Most specific topic; listed first so it wins over broader matches.
-    // maxPerTask:2 so the EIN step in an LLC-formation task can also pick it
-    // up (Tailor Brands files the EIN as part of the LLC package).
+    // Capped at 1 mention per task — the AI prompt instructs that EIN is
+    // handled INSIDE the same Tailor Brands package, so one link covers both.
     match: /\b(LLC|S[\s-]?Corp|C[\s-]?Corp|sole proprietorship|business entity|incorporate|register(?:ing)? your business|form(?:ing)? your business|business formation|file (?:for an? )?(?:LLC|entity|incorporation|paperwork)|legal entity|Articles of (?:Organization|Incorporation)|EIN|employer identification number|registered agent|operating agreement|Secretary of State|state filing|DBA|doing business as|file (?:articles|paperwork))\b/i,
     url: 'https://huba.academy/tailorbrands',
     label: 'Tailor Brands',
-    note: 'fastest LLC + brand kit in one',
-    maxPerTask: 2
+    note: 'fastest LLC + brand kit in one'
   },
   {
     // Community / membership platform → Skool.
@@ -10274,6 +10072,11 @@ function _injectAffiliateTopics(htmlText, sharedSeen){
   for (var i = 0; i < AFFILIATE_TOPICS.length; i++){
     var topic = AFFILIATE_TOPICS[i];
     var max = topic.maxPerTask || 1;
+    // Belt-and-suspenders text-level check: if this step's HTML already
+    // contains an anchor pointing at this partner's URL, never append a
+    // duplicate suggestion — regardless of what the shared seen-counter says.
+    // This guards against any race / state issue in the seen tracking.
+    if (htmlText.indexOf('href="' + topic.url + '"') !== -1) continue;
     if ((seen[topic.url] || 0) >= max) continue; // already linked this many times in this task
     if (!topic.match.test(htmlText)) continue;   // step doesn't mention this topic
     seen[topic.url] = (seen[topic.url] || 0) + 1;
@@ -10298,6 +10101,55 @@ function _matchAffiliateTopic(text){
 }
 window._matchAffiliateTopic = _matchAffiliateTopic;
 
+/* ---- Roadmap-wide affiliate link ownership ----
+   For each partner URL, find the FIRST task across the entire roadmap (M1 task
+   1, M1 task 2, ..., M6 task N — in order) that mentions the partner. That
+   task "owns" the link. Every other task that mentions the same partner gets
+   a styled brass highlight ONLY, no link.
+
+   Why: previously each task had its own seen-counter. So if HighLevel got linked
+   in M1 Task 2 AND in M3 Task 1 AND in M5 Task 4, the roadmap was full of
+   duplicate links. Computing ownership at the roadmap level fixes this
+   deterministically — the AI can name partner tools wherever they make sense,
+   and the render layer guarantees only the earliest mention is a hyperlink. */
+function _computeAffOwnership(milestones){
+  var ownership = {};
+  if (!Array.isArray(milestones)) return ownership;
+  function _taskText(t){
+    return [t.title || '', t.description || ''].concat(t.steps || []).join(' ');
+  }
+  milestones.forEach(function(m){
+    (m && m.tasks ? m.tasks : []).forEach(function(t){
+      if (!t || !t.id) return;
+      var text = _taskText(t);
+      AFFILIATES.forEach(function(a){
+        if (ownership[a.url]) return;
+        if (a.match.test(text)) ownership[a.url] = t.id;
+      });
+      AFFILIATE_TOPICS.forEach(function(topic){
+        if (ownership[topic.url]) return;
+        if (topic.match.test(text)) ownership[topic.url] = t.id;
+      });
+    });
+  });
+  return ownership;
+}
+window._computeAffOwnership = _computeAffOwnership;
+
+/* Build the seed seen-map for a single task render, given the roadmap-wide
+   ownership map. Any partner URL that this task does NOT own gets pre-seeded
+   at count=1 — the existing injectors treat that as "at cap" and switch to
+   highlight-only behavior. URLs this task DOES own start at 0, so the injector
+   places the link normally. */
+function _seedTaskSeen(taskId, ownership){
+  var seen = {};
+  Object.keys(ownership || {}).forEach(function(url){
+    if (ownership[url] !== taskId) seen[url] = 1;
+  });
+  return seen;
+}
+window._seedTaskSeen = _seedTaskSeen;
+
 /* ---- Current milestone tasks renderer ---- */
 function _renderCurrentMilestoneTasks(){
   var mount = document.getElementById('current-tasks-list');
@@ -10308,6 +10160,9 @@ function _renderCurrentMilestoneTasks(){
 
   var d = State.dashboard || {};
   var miles = (d.scaling && d.scaling.milestones) || [];
+  // Roadmap-wide affiliate ownership: which task gets the link for each partner.
+  // Computed fresh on every render so it stays correct when tasks are added/deleted.
+  var _affOwnership = _computeAffOwnership(miles);
   if (!miles.length){
     // Reset header text — otherwise stale "To reach: X" from a previous run lingers
     if (eyebrowEl) eyebrowEl.textContent = 'Up next';
@@ -10363,14 +10218,19 @@ function _renderCurrentMilestoneTasks(){
     var caretSvg = '<svg class="task-tile-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="9 6 15 12 9 18"/></svg>';
     tasks.forEach(function(t, i){
       var stepsHtml = '';
-      // One shared seen-map per TASK so each tool is linked exactly once across all its steps.
-      var _taskSeen = {};
+      // Seed seen with the roadmap-wide ownership map: any partner URL this
+      // task does NOT own is pre-seeded at count=1, so the injector treats it
+      // as "at cap" and uses the highlight-only path. URLs this task DOES own
+      // start at 0 — the injector places the link normally.
+      var _taskSeen = _seedTaskSeen(t.id, _affOwnership);
       // Topic seed: check the task title + description first. If the TASK is
       // about an affiliate-topic (e.g. "File Your LLC Paperwork") but no
       // individual step text triggers the regex, we still want the partner
-      // link to appear. Inject it into the first step in that case.
+      // link to appear — BUT only if this task is the link-owner for that URL.
+      // Otherwise we'd inject a duplicate link in a non-owner task.
       var _taskContext = (t.title || '') + ' ' + (t.description || '');
       var _topicMatched = _matchAffiliateTopic(_taskContext);
+      var _ownsTopic = _topicMatched && _affOwnership[_topicMatched.url] === t.id;
       var _stepIdx = 0;
       (t.steps || []).forEach(function(s){
         // Swap competitor names → partner names BEFORE escape/link, so a step
@@ -10379,9 +10239,9 @@ function _renderCurrentMilestoneTasks(){
         var swapped = _swapCompetitors(s);
         var linked = _injectAffiliateLinks(escapeHtml(swapped), _taskSeen);
         linked = _injectAffiliateTopics(linked, _taskSeen);
-        // Force-append the topic link to the FIRST step if the task is on-topic
-        // but no step naturally triggered the regex.
-        if (_topicMatched && !((_taskSeen[_topicMatched.url] || 0) >= 1) && _stepIdx === 0){
+        // Force-append the topic link to the FIRST step ONLY when this task
+        // is the rightful owner AND no step naturally triggered the regex.
+        if (_ownsTopic && _topicMatched && !((_taskSeen[_topicMatched.url] || 0) >= 1) && _stepIdx === 0){
           _taskSeen[_topicMatched.url] = (_taskSeen[_topicMatched.url] || 0) + 1;
           var noteHtml = _topicMatched.note ? ' <span class="aff-note">(' + _topicMatched.note + ')</span>' : '';
           linked += ' <span class="aff-suggest">→ <a href="' + _topicMatched.url + '" target="_blank" rel="noopener noreferrer" class="aff-link">' + _topicMatched.label + '</a>' + noteHtml + '</span>';
@@ -10838,114 +10698,10 @@ function _renderRoadmapWinding(){
 }
 
 
-async function _buildFullDashboard(){
-  // Run the same generator as finishAITrack but as a recovery from partial state.
-  var wrap = document.getElementById('scaling-graph-wrap');
-  if (wrap){
-    wrap.innerHTML =
-      '<div style="text-align:center; padding:56px 24px;">' +
-        '<img id="_build-orb" class="loader-orb" alt="" style="width:64px;height:64px;margin:0 auto 22px;display:block;"/>' +
-        '<p style="color:var(--cream); font-family:var(--serif-body); font-size:17px; font-style:italic;">Building your roadmap&hellip;</p>' +
-        '<p style="color:var(--smoke); font-family:var(--sans); font-size:11px; letter-spacing:.2em; text-transform:uppercase; margin-top:18px;">~45 seconds</p>' +
-        '<p id="_build-step" style="color:var(--smoke); font-family:var(--sans); font-size:12px; margin-top:18px;">Generating offer stack&hellip;</p>' +
-      '</div>';
-    var logoSrc = (document.querySelector('#login-crest') || document.querySelector('.intro-crest') || document.querySelector('#brand-bar img'));
-    var orb = document.getElementById('_build-orb');
-    if (logoSrc && orb && logoSrc.src) orb.src = logoSrc.src;
-  }
-  ['weekly-tasks','roadmap-weekly','roadmap-monthly','roadmap-quarterly'].forEach(function(id){
-    var el = document.getElementById(id);
-    if (el) el.innerHTML = '<div style="text-align:center; color:var(--smoke); font-family:var(--sans); font-size:12px; padding:24px;">Generating&hellip;</div>';
-  });
-
-  // Cycle the step text
-  var steps = ['Generating offer stack…','Researching market pricing…','Profiling your ideal buyer…','Mapping sales system…','Locking retention engine…','Plotting scaling milestones…','Crafting weekly tasks + roadmap…'];
-  var stepEl = document.getElementById('_build-step');
-  var sidx = 0;
-  var stepTimer = setInterval(function(){
-    sidx = (sidx + 1) % steps.length;
-    if (stepEl) stepEl.textContent = steps[sidx];
-  }, 4500);
-
-  // 120-second cap on the full build (6 parallel calls, slowest sets the time).
-  // Bumped from 60s — under Anthropic load spikes (e.g. new model rollouts) a
-  // single slow section can take 35-40s, and at 60s the whole build was
-  // killing slow sections that would have otherwise succeeded.
-  function _withTimeout(promise, ms){
-    return Promise.race([
-      promise,
-      new Promise(function(_, reject){
-        setTimeout(function(){ reject(new Error('TIMEOUT')); }, ms);
-      })
-    ]);
-  }
-  try {
-    var dash = await _withTimeout(generatePersonalizedDashboard(
-      State.answers.selling || {},
-      State.sellingBranch,
-      State.aiQuestions || [],
-      State.answers['ai-volume'] || {},
-      State.assignedTrack || 'volume'
-    ), 120000);
-    if (!dash || !dash.offer) throw new Error('Dashboard response incomplete. Please try again.');
-
-    // Normalize offer tiers (same as finishAITrack)
-    var offer = dash.offer;
-    offer.tiers = (offer.tiers || []).map(function(t){
-      return {
-        name: t.name || 'Tier',
-        price: t.price || '$0',
-        freq: t.freq || 'one-time',
-        tagline: t.tagline || '',
-        includes: t.includes || [],
-        excluded: t.excluded || [],
-        bestFor: t.bestFor || '',
-        recommended: !!t.recommended
-      };
-    });
-
-    State.dashboard = {
-      offers: [offer],
-      offer: offer,
-      pricing: dash.pricing,
-      buyer: dash.buyer,
-      sales: dash.sales,
-      retention: dash.retention,
-      scaling: dash.scaling,
-      weeklyTasks: dash.weeklyTasks || [],
-      roadmap: dash.roadmap || { weekly:[], monthly:[], quarterly:[] }
-    };
-    ['v-1','v-2','v-3','v-4','v-5'].forEach(function(s){ State.completedSteps.add(s); });
-    if (typeof saveRoadmap === 'function') saveRoadmap();
-
-    clearInterval(stepTimer);
-    _renderDashboardTabContent();
-  } catch (e){
-    console.error('Full dashboard build failed:', e);
-    clearInterval(stepTimer);
-    var isTimeout = e && e.message === 'TIMEOUT';
-    var msg = isTimeout
-      ? 'The AI is taking longer than 60 seconds to respond. Try again, or start fresh from the questions.'
-      : (e.message || 'Unknown error contacting the AI.');
-    if (wrap){
-      var html = '<div style="text-align:center; padding:32px; color:var(--cream); font-family:var(--sans); font-size:13px; line-height:1.6; max-width:520px; margin:0 auto;">';
-      html += '<div style="font-family:var(--serif-display); font-size:18px; color:var(--gold-1); margin-bottom:12px;">That took longer than expected.</div>';
-      html += '<div style="color:var(--smoke); margin-bottom:24px;">' + escapeHtml(msg) + '</div>';
-      html += '<button class="btn-gold btn-sm" id="_retry-build" type="button">Try again</button>';
-      if (isTimeout) html += ' &nbsp; <button class="btn-ghost btn-sm" id="_restart-build" type="button">Start Over from questions</button>';
-      html += '</div>';
-      wrap.innerHTML = html;
-      var rb = document.getElementById('_retry-build');
-      if (rb) rb.addEventListener('click', _buildFullDashboard);
-      var sb = document.getElementById('_restart-build');
-      if (sb) sb.addEventListener('click', function(){
-        var rba = document.getElementById('restart-all');
-        if (rba) rba.click();
-      });
-    }
-  }
-}
-window._buildFullDashboard = _buildFullDashboard;
+// _buildFullDashboard REMOVED — was a duplicate of finishAITrack with a tighter
+// 120s outer cap that always failed before the inner pipeline (up to 212s
+// worst-case) could complete. Callers now use finishAITrack directly — one
+// canonical build path, one 240s outer cap, no double-billing.
 
 function _renderDashboardTab(){
   var d = State.dashboard;
@@ -10963,12 +10719,17 @@ function _renderDashboardTab(){
                        && Object.keys(State.answers['ai-volume']).length >= 8;
 
   // CASE 1: AI questions answered but no dashboard → AUTO-FIRE the build.
-  // No button click required — you came back here, we'll just build it.
+  // Uses the ONE canonical builder (finishAITrack) — same 240s outer cap,
+  // same error handling, same loader UI as the questionnaire-completion path.
+  // Previously this called _buildFullDashboard with a 120s cap, which always
+  // timed out before the inner pipeline could complete, forcing the user to
+  // hit Try Again (which triggered finishAITrack with 240s and succeeded).
+  // Consolidating into one path eliminates that double-build cost.
   if (!hasOffer && hasAnsweredAIQs){
-    // Guard against double-firing if user switches tabs while build is in flight
-    if (!State._buildInFlight){
-      State._buildInFlight = true;
-      _buildFullDashboard().finally(function(){ State._buildInFlight = false; });
+    if (!window._finishInFlight){
+      finishAITrack();
+    } else {
+      console.info('[render] dashboard build already in flight — not starting another');
     }
     return;
   }
@@ -10986,16 +10747,19 @@ function _renderDashboardTab(){
     return;
   }
 
-  // CASE 3: Dashboard exists but missing scaling/tasks → backfill (existing behavior)
+  // CASE 3: Dashboard exists but missing scaling/tasks → rebuild via the
+  // canonical builder. Previously called _ensureDashboardComplete which used
+  // the OLD per-milestone parallel architecture (no dedup, no entity-formation
+  // standardization) — meaning if backfill ran, it re-introduced the duplicate
+  // tasks the new architecture was designed to prevent. Now uses finishAITrack
+  // so the same dedup + standardization rules apply.
   var needsBackfill = hasOffer && (!hasScaling || !hasTasks || !hasRoadmap);
   if (needsBackfill){
-    ['weekly-tasks','roadmap-weekly','roadmap-monthly','roadmap-quarterly'].forEach(function(id){
-      var el = document.getElementById(id);
-      if (el) el.innerHTML = '<div style="text-align:center; color:var(--smoke); font-family:var(--sans); font-size:12px; padding:24px;">Generating&hellip;</div>';
-    });
-    _ensureDashboardComplete().then(function(){
-      _renderDashboardTabContent();
-    });
+    if (!window._finishInFlight){
+      finishAITrack();
+    } else {
+      console.info('[render] backfill skipped — build already in flight');
+    }
     return;
   }
 
@@ -11339,14 +11103,8 @@ function _renderSocialTab(){
     html +=   '<ul id="pillar-hooks-list"></ul>';
     html += '</div>';
   }
-  // Quick wins
-  if (s.quickWins && s.quickWins.length){
-    html += '<div class="social-block">';
-    html +=   '<h4>First 7 posts to ship</h4><ul>';
-    s.quickWins.forEach(function(q, i){ html += '<li><b>Post ' + (i+1) + ':</b> ' + escapeHtml(q) + '</li>'; });
-    html +=   '</ul>';
-    html += '</div>';
-  }
+  // "First 7 Posts to Ship" section removed per user request — kept the rest
+  // of the social strategy intact (platforms, content pillars, hook formats).
   mount.innerHTML = html;
 
   // Wire the regenerate-from-old-shape button (if shown)
@@ -12049,6 +11807,8 @@ document.addEventListener('DOMContentLoaded', function setupSettings(){
   cancel.addEventListener('click', close);
   modal.addEventListener('click', function(e){ if (e.target === modal) close(); });
 
+  // Dashboard regenerate button — re-runs the AI build using your saved
+  // answers without making you re-do the questionnaire. Useful during
   // The proxy URL is baked into CLAUDE_PROXY_URL_DEFAULT — no longer a user-
   // facing setting, so no warn dot, no input field. window._openSettings is
   // kept for back-compat with older error paths that try to prompt for a key.
@@ -12178,11 +11938,15 @@ function showError(msg, withRetry){
 }
 
 // Core API call
-async function callClaude(systemPrompt, userMessage, maxTokens){
-  // The proxy hardcodes model + max_tokens server-side. We still send the
-  // same request shape we used to send directly to Anthropic — the proxy
-  // pulls out `messages` and `system` and ignores the rest.
+// Sonnet 4.6 is the only model in use. The hybrid Haiku routing experiment was
+// reverted — every personalized output stays on Sonnet for quality.
+var MODEL_SONNET = 'claude-sonnet-4-6';
+
+async function callClaude(systemPrompt, userMessage, maxTokens, model){
+  // The proxy reads `model` from the request body if provided, falling back
+  // to its server-side default (Sonnet) if not sent.
   maxTokens = maxTokens || 4096;
+  model = model || MODEL_SONNET;
   if (!ProxyURL.has()){
     window._openSettings();
     throw new Error('Claude Proxy URL required. Paste your deployed Supabase Edge Function URL in settings.');
@@ -12198,7 +11962,7 @@ async function callClaude(systemPrompt, userMessage, maxTokens){
         'authorization': 'Bearer ' + (typeof SUPABASE_PUBLISHABLE_KEY !== 'undefined' ? SUPABASE_PUBLISHABLE_KEY : '')
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: model,
         max_tokens: maxTokens,
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }]
@@ -12404,24 +12168,24 @@ var INFRASTRUCTURE_QUESTION_BANK = `
 Legal & Financial Foundation:
 - Have you registered a business entity yet (LLC, S-Corp, C-Corp, sole proprietorship)?
 - Do you have a separate business bank account set up?
-- Are you using bookkeeping or accounting software (QuickBooks, Wave, Xero, etc.)?
-- How do you currently take payments from customers (Stripe, PayPal, Square, none yet)?
+- Are you using bookkeeping or accounting software?
+- How do you currently take payments from customers (Stripe, PayPal, none yet)?
 
 Marketing & Sales Stack:
-- Do you have a CRM or sales pipeline tool set up (HighLevel, HubSpot, Pipedrive, none)?
-- Are you collecting email addresses (Mailchimp, Klaviyo, ConvertKit, Beehiiv, none yet)?
-- Are you using any DM automation (ManyChat, Instagram auto-replies, none)?
-- Do you have a website live (Shopify, Squarespace, custom, none yet)?
-- Do you have a calendar/booking tool (Calendly, Acuity, Cal.com, none)?
+- Do you have a CRM or sales pipeline tool set up (HighLevel, another tool, none)?
+- Are you collecting email addresses (HighLevel, another tool, none yet)?
+- Are you using any DM automation?
+- Do you have a website live (HighLevel, custom-built, no-code builder, none yet)?
+- Do you have a calendar/booking tool (HighLevel, Calendly, none)?
 
 Content & Community Operations:
 - Where do you publish your content right now (Instagram, TikTok, YouTube, LinkedIn, Skool, multiple, none)?
-- Are you scheduling social posts ahead (Buffer, Later, Metricool, posting manually, not posting)?
-- Do you have a community platform set up (Skool, Circle, Discord, Slack, none)?
+- Are you scheduling social posts ahead (HighLevel, another tool, posting manually, not posting)?
+- Do you have a community platform set up (Skool, another platform, none)?
 
 Tracking & Operations:
-- Do you have analytics installed on your site (Google Analytics, Plausible, Mixpanel, none)?
-- How do you organize your work day-to-day (Notion, ClickUp, Trello, Asana, paper/spreadsheet, nothing yet)?
+- Do you have analytics installed on your site?
+- How do you organize your work day-to-day?
 - Are you running any paid ads currently (Meta, Google, TikTok, none)?
 `;
 
@@ -12489,6 +12253,12 @@ async function generatePersonalizedQuestions(sellingAnswers, branch, track){
     '- PREFER multiple_choice / multiselect over text for SPEED. Reserve "text" for when only a name / specific qualitative detail is needed (max 3 text questions total). Never use "text" for a number that should be computed.\n' +
     '- For each multiple_choice / multiselect: 4-5 realistic specific options PLUS "Other". Options should reference their niche.\n' +
     '- Every question should feel custom — not generic.\n\n' +
+    'STRICTLY FORBIDDEN BRANDS — These names MUST NEVER appear in question text OR in any answer option. If the use case fits one of OUR partner tools, use the partner name. If not, use a generic descriptor (e.g. "online store" instead of "Shopify store", "email tool" instead of "Mailchimp"):\n' +
+    '  • Use "HighLevel" instead of: Shopify, Squarespace, Wix, Webflow, WordPress, Carrd, Leadpages, Unbounce, Instapage, ClickFunnels, Kajabi, ConvertKit, Mailchimp, ActiveCampaign, AWeber, GetResponse, Brevo, Constant Contact, MailerLite, Beehiiv, Substack, HubSpot, Pipedrive, Keap, Salesforce, Zoho, Klaviyo, Twilio, Postscript, Attentive, Buffer, Hootsuite, Sprout Social, Linktree, Beacons.ai, Vercel, Netlify, Typeform, JotForm, Acuity Scheduling, WebinarJam, EverWebinar, Demio, Birdeye, Podium\n' +
+    '  • Use "Tailor Brands" instead of: Northwest Registered Agent, ZenBusiness, LegalZoom, Inc Authority, Rocket Lawyer, Stripe Atlas, Firstbase, Doola, IncFile, Bizee\n' +
+    '  • Use "Skool" instead of: Circle, Circle.so, Mighty Networks, Mighty Pro, Teachable, Thinkific, Podia, Memberspace, Memberstack, Bettermode, Hivebrite\n' +
+    '  • Use "Claude Code" instead of: Cursor, GitHub Copilot, Replit, v0, Lovable, Bolt.new, Codeium, Tabnine, Windsurf\n' +
+    'Neutral tools allowed: Stripe (payments), Calendly (booking when HighLevel isn\'t deployed), IRS (gov source), Secretary of State (gov source), QuickBooks/Xero (accounting).\n\n' +
     'OUTPUT: Return ONLY a valid JSON array of EXACTLY 12 question objects. No markdown, no explanation, no preamble.\n\n' +
     'Each question object must have:\n' +
     '{\n' +
@@ -12519,7 +12289,24 @@ async function generatePersonalizedQuestions(sellingAnswers, branch, track){
     '\n\nGenerate exactly 12 personalized strategy questions as a JSON array.';
 
   var response = await callClaude(system, user, 2500);
-  return extractAndParseJSON(response);
+  var parsed = extractAndParseJSON(response);
+  // Belt-and-suspenders: scrub competitor brand names out of the question
+  // text + every answer option. The prompt above tells the AI not to use them,
+  // but this catches the leaks anyway — same swap layer the task renderer
+  // uses, so the rules stay consistent in one place.
+  if (Array.isArray(parsed) && typeof _swapCompetitors === 'function'){
+    parsed.forEach(function(q){
+      if (q && typeof q.question === 'string'){
+        q.question = _swapCompetitors(q.question);
+      }
+      if (q && Array.isArray(q.options)){
+        q.options = q.options.map(function(opt){
+          return typeof opt === 'string' ? _swapCompetitors(opt) : opt;
+        });
+      }
+    });
+  }
+  return parsed;
 }
 
 
@@ -12575,7 +12362,53 @@ async function generatePersonalizedDashboard(sellingAnswers, branch, aiQuestions
   // mega-prompt would hit (response can exceed 60s + 16K tokens).
   // -------------------------------------------------------------------------
   var SCHEMAS = {
-    offer: '{\n  "name": "specific offer name referencing their niche",\n  "oneLiner": "single sentence that sells it",\n  "format": "format type",\n  "priceTier": "price range string",\n  "tiers": [\n    {\n      "name": "tier name", "price": "$X", "freq": "one-time" | "/mo" | "/yr",\n      "tagline": "sharp single-sentence sell line",\n      "includes": ["polished deliverable 1", "polished deliverable 2", "..."],\n      "excluded": ["item only in higher tiers"],\n      "bestFor": "who this tier is for, one line",\n      "recommended": false,\n      "promises": [{ "category": "Refund|Results|Access|Pricing|Trial", "wording": "polished customer-facing wording" }],\n      "bonuses": [{ "text": "bonus name", "why": "why this adds value, one line tied to the buyer outcome" }],\n      "marketing": {\n        "hook": "1-line attention-grabber for social posts — names pain or dream",\n        "proof": "2-3 sentence credibility statement for sales pages — names mechanism + believable result",\n        "close": "short friction-reducing CTA line"\n      },\n      "urgency": { "type": "cohort start | spot limit | bonus expiring | price increase | etc", "copy": "paste-ready urgency line" },\n      "objections": [{ "objection": "exact buyer phrasing of the no", "response": "polished non-pushy response" }],\n      "salesMath": { "salesToGoal": N, "perWeek": N, "perDay": N, "note": "short context line" }\n    },\n    { "name": "...", "recommended": true, "...": "..." },\n    { "name": "...", "...": "..." }\n  ],\n  "repeat": "paragraph on why they\'ll buy again"\n}',
+    // UNIFIED offer schema — all tier fields in one call. Splitting offer +
+    // offerDetail into parallel sibling calls was unreliable: when offerDetail
+    // failed or returned partial JSON, tiers showed up with empty marketing/
+    // urgency/objections/salesMath. Single call = reliable rich tiers every time.
+    //
+    // Schema examples deliberately show 3 items in promises/bonuses/objections
+    // arrays — not 1 — so the model doesn\'t interpret "1 example" as "1 is enough".
+    offer: '{\n' +
+      '  "name": "specific offer name referencing their niche",\n' +
+      '  "oneLiner": "single sentence that sells it",\n' +
+      '  "format": "format type",\n' +
+      '  "priceTier": "price range string",\n' +
+      '  "tiers": [\n' +
+      '    {\n' +
+      '      "name": "tier name", "price": "$X", "freq": "one-time" | "/mo" | "/yr",\n' +
+      '      "tagline": "sharp single-sentence sell line",\n' +
+      '      "includes": ["deliverable 1", "deliverable 2", "deliverable 3", "deliverable 4", "deliverable 5"],\n' +
+      '      "excluded": ["item only in higher tier 1", "item only in higher tier 2"],\n' +
+      '      "bestFor": "who this tier is for, one line",\n' +
+      '      "recommended": false,\n' +
+      '      "promises": [\n' +
+      '        { "category": "Refund", "wording": "polished customer-facing wording" },\n' +
+      '        { "category": "Results", "wording": "..." },\n' +
+      '        { "category": "Access", "wording": "..." }\n' +
+      '      ],\n' +
+      '      "bonuses": [\n' +
+      '        { "text": "bonus 1 name", "why": "why this adds value — tied to outcome" },\n' +
+      '        { "text": "bonus 2 name", "why": "..." },\n' +
+      '        { "text": "bonus 3 name", "why": "..." }\n' +
+      '      ],\n' +
+      '      "marketing": {\n' +
+      '        "hook": "1-line attention-grabber for social posts — names pain or dream",\n' +
+      '        "proof": "2-3 sentence credibility statement for sales pages — names mechanism + believable result",\n' +
+      '        "close": "short friction-reducing CTA line"\n' +
+      '      },\n' +
+      '      "urgency": { "type": "cohort start | spot limit | bonus expiring | price increase", "copy": "paste-ready urgency line" },\n' +
+      '      "objections": [\n' +
+      '        { "objection": "exact buyer phrasing of the first no", "response": "polished non-pushy response" },\n' +
+      '        { "objection": "second buyer objection", "response": "..." },\n' +
+      '        { "objection": "third buyer objection", "response": "..." }\n' +
+      '      ],\n' +
+      '      "salesMath": { "salesToGoal": N, "perWeek": N, "perDay": N, "note": "short context line" }\n' +
+      '    },\n' +
+      '    { "name": "...", "recommended": true, "...": "(same full structure as above)" }\n' +
+      '  ],\n' +
+      '  "repeat": "paragraph on why they\'ll buy again"\n' +
+      '}',
 
     pricing: '{\n  "standaloneValues": [{ "item": "...", "value": "$X" }],\n  "totalValue": "$X",\n  "marketContext": "2-3 sentence paragraph with real market rates in their space",\n  "recommendedPrice": "$X",\n  "whyWorthIt": "paragraph",\n  "whyPrice": "paragraph on psychology of this price",\n  "tieredOption": { "standard": {"name": "...", "price": "$X", "includes": "..."}, "premium": {"name": "...", "price": "$X", "includes": "..."} } or null,\n  "salesMath": { "salesFor10k": N, "weeklySales": N, "dailySales": N, "price": "$X" }\n}',
 
@@ -12586,45 +12419,75 @@ async function generatePersonalizedDashboard(sellingAnswers, branch, aiQuestions
     retention: '{\n  "followUp": [{ "when": "timing", "what": "touchpoint description", "why": "what it accomplishes" }],\n  "repeatTrigger": { "offer": "the repeat offer", "timing": "when to introduce", "framing": "how to position" },\n  "ascension": { "current": "this offer", "next": "natural next offer", "premium": "high-ticket option", "paragraph": "how they ascend over time" },\n  "referralMechanism": { "experience": "what creates referral impulse", "system": "the exact ask or system" },\n  "communityPull": "paragraph on what connects them past the transaction",\n  "retentionMetric": { "rate": "benchmark", "howTrack": "tracking method", "ifDrops": "action if below" }\n}'
   };
 
-  // Shared per-tier instruction block — appended to BOTH track variants of the offer hint
+  // Per-tier instruction for the unified offer call. Lists EVERY field required
+  // per tier so the AI generates the full rich offer in one response. Each tier
+  // MUST be completely filled out — empty arrays mean the deep-modal sections
+  // render blank and the offer feels half-built.
   var PER_TIER_INSTRUCTION =
-    ' EVERY TIER must be fully fleshed out with REAL-WORLD LOGIC applied — substitute anything that doesn\'t fit silently:\n' +
-    ' • includes: 5-8 polished deliverables in clean parallel structure\n' +
-    ' • promises: 3-5 polished promises with category labels (Refund/Results/Access/Pricing/Trial). Pick promises that actually fit this tier\'s price + format (e.g. $7/mo doesn\'t need a 30-day refund — "cancel anytime" fits better)\n' +
-    ' • bonuses: 3-5 bonuses with text + a "why this adds value" line tied to the buyer outcome\n' +
+    ' EVERY TIER must be fully fleshed out — NO empty arrays anywhere:\n' +
+    ' • includes: 5-8 polished deliverables (parallel structure)\n' +
+    ' • promises: EXACTLY 3-5 promises with category labels (Refund/Results/Access/Pricing/Trial). Pick promises that fit this tier\'s price + format (e.g. $7/mo doesn\'t need 30-day refund — "cancel anytime" fits)\n' +
+    ' • bonuses: EXACTLY 3-5 bonuses with text + a "why this adds value" line tied to the buyer outcome\n' +
     ' • marketing: 3 ready-to-paste lines (hook for social, proof for sales page, close for CTA)\n' +
-    ' • urgency: the natural reason-to-buy-now for THIS tier + paste-ready copy\n' +
-    ' • objections: top 3 objections in real buyer phrasing + polished non-pushy responses\n' +
-    ' • salesMath: at this tier\'s price, how many sales = $10K? Compute salesToGoal / perWeek (over 4 weeks) / perDay (over 30 days).';
+    ' • urgency: type + paste-ready copy — natural reason-to-buy-now for THIS tier\n' +
+    ' • objections: EXACTLY 3 objections in real buyer phrasing + non-pushy responses\n' +
+    ' • salesMath: at this tier\'s price, salesToGoal (= $10K ÷ price), perWeek (over 4 weeks), perDay (over 30 days), note';
 
   var SECTION_HINTS = track === 'single' ? {
-    offer:     'Generate the SERVICE OFFER. 3 distinct service tiers (e.g. Essentials / Premium / White-Glove or similar names appropriate to their niche). The middle tier should be the typical engagement they described and marked recommended:true. Use realistic per-engagement pricing for their space.' + PER_TIER_INSTRUCTION,
+    offer:     'Generate the SERVICE OFFER. EXACTLY 2 distinct service tiers (e.g. Essentials + Premium, or Standard + White-Glove). One marked recommended:true — the typical engagement they described. The second tier is the upsell/upgrade option. Use realistic per-engagement pricing.' + PER_TIER_INSTRUCTION,
     pricing:   'Generate PRICING strategy for a high-ticket engagement. Use real market rates for that service in their niche. salesMath: how many engagements at recommendedPrice equals $10K.',
     buyer:     'Generate the CLIENT PROFILE. Vivid avatar of the ideal high-ticket client. 5 specific angles in plain language. notFor must exclude wrong-fit clients explicitly.',
     sales:     'Generate the SALES SYSTEM for high-ticket. Pick the single highest-leverage channel for their niche. Discovery/qualification step. 3 real objections with dissolving language. The CTAs should reflect a high-ticket conversation, not a checkout.',
     retention: 'Generate the RETENTION + GROWTH ENGINE for a service business. Post-engagement touchpoints. Ascension to premium / continuing engagement. Concrete referral mechanism — high-ticket clients refer for specific reasons.'
   } : {
-    offer:     'Generate the OFFER STACK. 3 distinct tiers, middle tier marked recommended:true with the price they indicated. Bonuses specific to their offer (not generic).' + PER_TIER_INSTRUCTION,
+    offer:     'Generate the OFFER STACK. EXACTLY 2 distinct tiers. One marked recommended:true with the price they indicated — this is the main offer. The second tier is either a lower-priced entry option OR a higher-priced premium upgrade (pick whichever fits the offer better). Bonuses specific to their offer (not generic).' + PER_TIER_INSTRUCTION,
     pricing:   'Generate the PRICING strategy. Use real market rates for their niche. salesMath should compute how many sales at recommendedPrice = $10K.',
     buyer:     'Generate the BUYER PROFILE. Vivid avatar paragraph. 5 specific angles in plain language.',
     sales:     'Generate the SALES SYSTEM. Pick the single highest-leverage channel for their niche. 4-6 step sequence. 3 real objections with dissolving language.',
     retention: 'Generate the RETENTION ENGINE. 4-5 follow-up touchpoints. Realistic ascension path. Concrete referral mechanism.'
   };
 
-  // Single-section generator
+  // Single-section generator.
+  // The system prompt is intentionally LEAN — just role + section instruction +
+  // schema. MODEL_RECOGNITION (the ~600-word business-model framing block used
+  // for QUESTION SELECTION) is deliberately NOT included here. It's dead weight
+  // for content generation and was previously adding ~600 tokens × every call
+  // to no functional benefit, slowing each section's response time.
+  //
+  // max_tokens is sized per-section to actual output. Offer needs ~3500 because
+  // it generates 3 fully-fleshed tiers (each ~500-700 tokens of structured JSON
+  // — includes 5-8, promises 3-5, bonuses 3-5). Offer was previously hitting
+  // 1500 and getting truncated mid-output, which is why promises/bonuses were
+  // showing up empty in rendered tiers.
+  var SECTION_MAX_TOKENS = {
+    // Offer holds 2 fully-fleshed tiers, each with includes (5-8) + promises
+    // (3-5) + bonuses (3-5) + marketing + urgency + objections (3) + salesMath.
+    // Empirically ~1700-1900 tokens per tier when AI is verbose (real-world
+    // output is longer than minimal schema estimates). 6000 gives serious
+    // headroom so promises/bonuses/marketing/urgency/objections/salesMath
+    // can't get truncated — these were silently going missing at 4000 cap.
+    offer:     6000,
+    pricing:   1200,
+    buyer:     1000,
+    sales:     1200,
+    retention: 1500,
+    scaling:   1000
+  };
+
+  // Every section uses Sonnet — hybrid Haiku routing was reverted because
+  // every personalized output is "custom" and must stay on Sonnet quality.
+
   async function generateSection(name){
     var trackLabel = track === 'single' ? 'High-Ticket / Single Sale Track' : 'Volume Track';
     var system = 'You are a business strategist building a personalized $10K ' + trackLabel + ' roadmap. ' +
                  'Generate ONLY the "' + name + '" section. ' +
                  'Be SPECIFIC — reference their exact niche, audience, and product by name throughout. ' +
-                 'Use REAL numbers based on real market rates. ' +
-                 '\n\n' + MODEL_RECOGNITION + '\n\n' +
-                 SECTION_HINTS[name] + ' ' +
+                 'Use REAL numbers based on real market rates.\n\n' +
+                 SECTION_HINTS[name] +
                  '\n\nOUTPUT: Return ONLY a valid JSON object matching this exact schema. No markdown fences, no explanation, no preamble.\n\nSCHEMA:\n' + SCHEMAS[name];
     var user = contextBlock + '\n\nGenerate the "' + name + '" JSON object now.';
-    // max_tokens sized to actual output: offer ~400, pricing ~250, buyer ~200, sales ~300, retention ~300,
-    // scaling-structure ~200. 1500 is safely above all of them and keeps 6-parallel OTPM under tier-1 limits.
-    var resp = await callClaude(system, user, 1500);
+    var maxTok = SECTION_MAX_TOKENS[name] || 1500;
+    var resp = await callClaude(system, user, maxTok, MODEL_SONNET);
     return extractAndParseJSON(resp);
   }
 
@@ -12637,113 +12500,405 @@ async function generatePersonalizedDashboard(sellingAnswers, branch, aiQuestions
 
   SECTION_HINTS.tasks = 'Generate WEEKLY TASKS + a ROADMAP. weeklyTasks = 3-5 specific moves for THIS week (highest leverage). roadmap.weekly = 4-6 milestones spread over the first 4-6 weeks. roadmap.monthly = 3-5 milestones for months 2-4. roadmap.quarterly = 2-3 milestones for the next 2-3 quarters. Every item must be a concrete lever, not vague advice.';
 
-  // Fire 7 in parallel — slowest call sets total time, still ~30-45s typical.
-  // Per-section timeout bumped to 90s to absorb Anthropic latency spikes
-  // (we've seen single sections take 35-40s under load). Slow sections still
-  // fail individually without killing the rest.
-  function _sectionWithTimeout(name){
+  // Fire 6 in parallel — slowest call sets total time, ~25-40s typical.
+  // Per-section timeout 90s: the OFFER section generates 2 fully-fleshed tiers
+  // (~3500-4000 output tokens) which Sonnet 4.6 writes sequentially within the
+  // single call, taking 50-70s under normal conditions. 60s was cutting offer
+  // calls right at the line and forcing retries that re-burned the same cost.
+  // 90s gives the offer call genuine breathing room while keeping worst-case
+  // recovery bounded (90s × 2 retries = 181s per section).
+  //
+  // Each section gets up to 2 attempts BEFORE giving up:
+  //   • Attempt 1: 90s timeout
+  //   • If attempt 1 fails (timeout OR error), wait 800ms and retry once
+  //   • Still failing? Return null — non-critical sections use defaults,
+  //     OFFER section being null triggers the "rebuild" error UI.
+  function _sectionOnce(name){
     return Promise.race([
       generateSection(name),
       new Promise(function(_, reject){ setTimeout(function(){ reject(new Error('TIMEOUT:' + name)); }, 90000); })
-    ]).catch(function(err){
-      console.warn('Section ' + name + ' failed:', err);
-      return null; // null = use defaults / skip
-    });
+    ]);
   }
-  var results = await Promise.all([
-    _sectionWithTimeout('offer'),
-    _sectionWithTimeout('pricing'),
-    _sectionWithTimeout('buyer'),
-    _sectionWithTimeout('sales'),
-    _sectionWithTimeout('retention'),
-    _sectionWithTimeout('scaling')
-  ]);
-
-  var dash = {
-    offer:     results[0],
-    pricing:   results[1],
-    buyer:     results[2],
-    sales:     results[3],
-    retention: results[4],
-    scaling:   results[5]
-  };
-  // If offer failed, we still need SOMETHING — bail with error
-  if (!dash.offer){
-    throw new Error('Could not generate the core offer — please retry.');
-  }
-
-  // ===========================================================================
-  // STAGE 2 — Tasks per milestone (6 parallel calls, ~20-30s typical).
-  //   We chain this AFTER scaling structure is back so we know how many
-  //   milestones exist and their labels/meanings. Each call is small.
-  // ===========================================================================
-  if (dash.scaling && Array.isArray(dash.scaling.milestones) && dash.scaling.milestones.length > 1){
-    var TASKS_SCHEMA = '{ "tasks": [ { "id": "kebab-id", "title": "4-6 word plain title", "description": "one sentence", "steps": ["step 1", "step 2", "step 3"] } ] }';
-    function _tasksHintFor(milestone, milestoneIdx){
-      var gapRule = '';
-      if (milestoneIdx === 1) gapRule = 'GAP RULE: If Business Setup shows NO entity (or unsure) OR unclear offer/pricing, those gaps belong here. ONE gap-task max.';
-      else if (milestoneIdx === 2) gapRule = 'GAP RULE: If Business Setup shows NO website (or not converting), that gap belongs here. ONE gap-task max.';
-      else if (milestoneIdx === 3) gapRule = 'GAP RULE: If Business Setup shows NO referral program OR NO social media strategy, surface ONE of those here. ONE gap-task max.';
-      else if (milestoneIdx === 4) gapRule = 'GAP RULE: If Business Setup shows NO follow-up system AND they have leads coming in, surface that here. ONE gap-task max.';
-      else if (milestoneIdx === 5) gapRule = 'GAP RULE: They have hit the goal. Use gap-tasks sparingly — only the most impactful remaining gap as polish.';
-      else if (milestoneIdx === 6) gapRule = 'GAP RULE: Any remaining open gap becomes a systemization task here.';
-      else                       gapRule = 'GAP RULE: NO setup gaps here — pure growth tasks only.';
-      return 'Generate exactly 3-4 TASKS that a beginner must complete to REACH this milestone.\n' +
-             'MILESTONE: "' + milestone.label + '" — ' + (milestone.meaning || '') + '\n' +
-             'TARGET: $' + milestone.revenue + ' by day ' + milestone.day + '.\n\n' +
-             'BUSINESS SETUP — What the user already has vs lacks:\n' +
-             'Look at the BUSINESS SETUP section in the CONTEXT above. If they said "Yes" to having an LLC, DO NOT include any entity-formation task. Same for website, referral program, social media strategy, follow-up system, offer/pricing clarity. Never put more than ONE gap-task in a single milestone.\n\n' +
-             'TOOL PREFERENCES — Always recommend OUR partner tools when the task fits, NEVER suggest competitors:\n' +
-             '  • LLC / business entity formation → "Tailor Brands" (handles LLC filing AND brand kit). DO NOT suggest Northwest Registered Agent, ZenBusiness, LegalZoom, Inc Authority.\n' +
-             '  • Website / landing page / storefront / online store → "HighLevel". DO NOT suggest Shopify, Squarespace, Wix, Webflow, WordPress, Kajabi, ClickFunnels, Leadpages, Carrd.\n' +
-             '  • CRM / sales pipeline / email automation / SMS / funnel automation → "HighLevel". DO NOT suggest HubSpot, Pipedrive, ActiveCampaign, ConvertKit, Mailchimp, Klaviyo.\n' +
-             '  • Community platform / paid membership → "Skool". DO NOT suggest Circle, Mighty Networks, Discord (paid), Facebook Groups.\n' +
-             '  • Code / AI coding assistant → "Claude Code". DO NOT suggest Cursor, Copilot, Replit, v0.\n' +
-             'These are the ONLY platforms we have affiliate deals with. Naming a competitor costs the user money AND loses commission. For neutral utilities use Stripe (payments) and Calendly (booking).\n\n' +
-             gapRule + '\n\n' +
-             'EACH TASK MUST HAVE:\n' +
-             '- title: 4-6 words plain English\n' +
-             '- description: ONE plain-English sentence\n' +
-             '- steps: 3-5 specific actions a beginner can follow exactly. Name actual tools by name — PREFER Tailor Brands / HighLevel / Skool / Claude Code per TOOL PREFERENCES above. Use Stripe for payments, Calendly for booking.\n\n' +
-             'NO JARGON. NO "optimize/leverage/monetize/stack/funnel/scale/activate".\n' +
-             'Output ONLY a JSON object with tasks array.';
+  async function _sectionWithTimeout(name){
+    try {
+      return await _sectionOnce(name);
+    } catch (firstErr){
+      console.warn('[section] ' + name + ' attempt 1 failed, retrying in 800ms:', firstErr && firstErr.message);
+      await new Promise(function(r){ setTimeout(r, 800); });
+      try {
+        return await _sectionOnce(name);
+      } catch (secondErr){
+        console.warn('[section] ' + name + ' attempt 2 also failed; returning null:', secondErr && secondErr.message);
+        return null;
+      }
     }
-    async function _genTasksForMilestone(m, milestoneIdx){
-      var system = 'You are a business strategist building a personalized $10K ' + (track === 'single' ? 'High-Ticket' : 'Volume') + ' roadmap. Generate ONLY the tasks for milestone ' + milestoneIdx + '. Be SPECIFIC — reference their exact niche by name. Use REAL numbers. ' +
-                   '\n\n' + (typeof MODEL_RECOGNITION !== 'undefined' ? MODEL_RECOGNITION : '') + '\n\n' +
-                   _tasksHintFor(m, milestoneIdx) +
-                   '\n\nOUTPUT: Return ONLY a valid JSON object. No markdown fences. SCHEMA:\n' + TASKS_SCHEMA;
-      var user = contextBlock + '\n\nGenerate the tasks for milestone ' + milestoneIdx + ' ("' + m.label + '") now.';
-      var resp = await callClaude(system, user, 1500);
+  }
+  // ===========================================================================
+  // OPTION A ARCHITECTURE — scaling-first, then everything else in parallel.
+  //
+  // Order:
+  //   1. Fire `scaling` section ALONE first (~15-20s). Small, fast, needed for
+  //      milestone labels that the task calls reference.
+  //   2. Fire 5 remaining sections + 6 milestone task calls ALL IN PARALLEL.
+  //      Tasks no longer wait for the slowest section (offer) to finish — they
+  //      run alongside it. Wall-clock = max of all 11 concurrent calls.
+  //
+  // Saves ~30s vs the old "all 6 sections sequential-before tasks" approach.
+  // ===========================================================================
+
+  console.info('[build] step 1: firing scaling section first');
+  var scalingResult = await _sectionWithTimeout('scaling');
+  if (!scalingResult || !Array.isArray(scalingResult.milestones) || scalingResult.milestones.length === 0){
+    throw new Error('Could not generate scaling structure — please retry.');
+  }
+
+  var taskMilestones = scalingResult.milestones.slice(1); // skip Start (idx 0)
+
+  // Per-milestone schema — small focused output (4 tasks per call). Smaller
+  // call = fits in 60s Supabase Edge Function timeout on Free tier.
+  var MILESTONE_TASKS_SCHEMA = '{\n' +
+    '  "tasks": [\n' +
+    '    { "id": "kebab-id", "topic": "short-slug", "title": "4-6 word plain title", "description": "one sentence", "steps": ["step 1", "step 2", "step 3"] }\n' +
+    '  ]\n' +
+    '}';
+
+    // Phase description per milestone — gives the AI focused guidance on what
+    // kinds of tasks fit THIS milestone vs others. Reinforces progressive order.
+    function _milestonePhase(idx){
+      switch (idx){
+        case 1: return 'FOUNDATION — legal, operational, and infrastructure work that must exist BEFORE any sale (entity formation, banking, supplier/source lockdown for product businesses, offer + pricing finalization, product/landing/storefront pages, payment integration, analytics setup).';
+        case 2: return 'FIRST REVENUE — earliest paths to the first paying customers (pre-launch warmup, first drop/launch, warm outreach to existing audience, member-first access for community businesses, content cadence kickoff).';
+        case 3: return 'MOMENTUM — repeatable consistency on what\'s working (follow-up automation, post-purchase email, early creator partnerships, second drop or repeat purchase mechanism, customer testimonials capture).';
+        case 4: return 'OPTIMIZATION — making the working channel work better (conversion improvements, abandoned cart, paid traffic test, audience expansion, retention rituals, content pillar refinement).';
+        case 5: return 'GOAL HIT — crossing the $10K milestone (premium tier launch, member-exclusive offers, ascending existing customers, ambassador/referral program activation, repeat drop or upsell campaign).';
+        case 6: return 'SCALING — growing past $10K (new channels, recurring revenue streams, paid traffic at scale, new product line, expansion to additional platforms, systemization).';
+        default: return 'GROWTH — continued expansion past goal.';
+      }
+    }
+
+    // Per-milestone system prompt. Each call sees:
+    //   • Business context (contextBlock — selling answers + Q&A + business setup)
+    //   • THIS milestone\'s label, meaning, revenue, day
+    //   • Phase guidance
+    //   • The full list of topic slugs already covered in EARLIER milestones —
+    //     so AI literally cannot repeat them, eliminating cross-milestone dupes
+    //     upstream (no post-process safety dedupe needed).
+    function _perMilestoneSystem(milestoneIdx, milestone, priorTopics, taskCount){
+      var trackLabel = track === 'single' ? 'High-Ticket' : 'Volume';
+      var priorList = (priorTopics && priorTopics.length)
+        ? 'TOPICS ALREADY COVERED in previous milestones — DO NOT REPEAT these. Generate DIFFERENT outcomes:\n  • ' + priorTopics.join('\n  • ') + '\n\n'
+        : 'This is the FIRST milestone — no prior topics yet.\n\n';
+      return 'You are a business strategist building a personalized $10K ' + trackLabel + ' roadmap. Generate the ' + taskCount + ' tasks for MILESTONE ' + milestoneIdx + ' ONLY. Be SPECIFIC — reference their exact niche by name throughout. Use REAL numbers.\n\n' +
+        'MILESTONE ' + milestoneIdx + ' = "' + (milestone.label || '') + '"\n' +
+        'Meaning: ' + (milestone.meaning || '') + '\n' +
+        'Revenue target: $' + (milestone.revenue || 0) + ' by day ' + (milestone.day || 0) + '\n' +
+        'Phase: ' + _milestonePhase(milestoneIdx) + '\n\n' +
+        priorList +
+        'OUTPUT — exactly ' + taskCount + ' tasks for THIS milestone:\n' +
+        '- Each task addresses a UNIQUE outcome that is NOT in the prior-topics list above.\n' +
+        '- Tasks fit the current phase (' + (milestone.label || '') + ').\n' +
+        '- Order them in real-world execution sequence WITHIN this milestone.\n' +
+        '- Reference their exact niche, audience, and product/service by name.\n\n' +
+        'DUPLICATE RULES (within this milestone):\n' +
+        '- "Build hat product page" + "Build hoodie product page" = SAME outcome (product pages). ONE task with steps for both.\n' +
+        '- "Set up Instagram bio" + "Set up TikTok bio" = SAME outcome (social bio setup). ONE task covering both platforms.\n' +
+        '- "Set up welcome email" + "Set up post-purchase email" = DIFFERENT outcomes — BOTH belong if they fit this phase.\n\n' +
+        'PER-TASK FOCUS:\n' +
+        '- Each task = ONE outcome with 3-5 concrete steps.\n' +
+        '- Mention AT MOST ONE partner tool per task.\n' +
+        '- Steps focus on completing the task itself, not on selling adjacent platforms.\n\n' +
+        'STEP WRITING STYLE — task-forward, action-led, no padding:\n' +
+        '- Each step STARTS with an action verb (Set up, Build, Write, Send, Track, Open, Lock in, Post, Film, Confirm, etc.).\n' +
+        '- One step = ONE clean sentence, max ~20 words. No semicolons, no "and ... and ..." chains, no parenthetical sub-clauses.\n' +
+        '- Keep the SPECIFIC tool, number, or tactical detail (e.g. "Set up a 3-message follow-up in HighLevel"). Skip the "why" reasoning — the description covers that.\n' +
+        '- Drop all editorial padding: never use "so that...", "in order to...", "this helps you...", "which means...", "ensuring...".\n' +
+        '- If an action needs more than ~20 words to describe, split it into TWO steps.\n\n' +
+        'BUSINESS SETUP — Respect what the user already has:\n' +
+        'If BUSINESS SETUP says "Yes" to having an LLC, website, referral program, social strategy, follow-up system, etc., SKIP that topic entirely — it\'s done.\n\n' +
+        'TOOL PREFERENCES — Always recommend OUR partner tools, NEVER name a competitor:\n' +
+        '  • LLC / business entity / EIN / registered agent → "Tailor Brands".\n' +
+        '  • Website / landing page / storefront / link-in-bio / CRM / email / SMS / booking → "HighLevel".\n' +
+        '  • Community / paid membership / online course → "Skool".\n' +
+        '  • AI coding assistant → "Claude Code".\n' +
+        'FORBIDDEN BRANDS: Northwest Registered Agent, ZenBusiness, LegalZoom, Inc Authority, Rocket Lawyer, Stripe Atlas, Firstbase, Doola, IncFile, Shopify, Squarespace, Wix, Webflow, WordPress, Kajabi, ClickFunnels, Leadpages, Carrd, Unbounce, Instapage, HubSpot, Pipedrive, ActiveCampaign, ConvertKit, Mailchimp, Klaviyo, AWeber, GetResponse, MailerLite, Beehiiv, Substack, Salesforce, Zoho, Twilio, Buffer, Hootsuite, Sprout Social, Typeform, JotForm, Circle, Mighty Networks, Teachable, Thinkific, Podia, Cursor, GitHub Copilot, Replit, v0, Lovable, Bolt.\n' +
+        'Neutral utilities OK: Stripe (payments), QuickBooks/FreshBooks (accounting), IRS / Secretary of State.\n' +
+        'EIN flows THROUGH Tailor Brands as part of the LLC package — never irs.gov, never a separate task.\n\n' +
+        'CANONICAL TOPIC SLUGS — use one of these when it fits, otherwise invent a clean kebab-slug:\n' +
+        '  UNIVERSAL: "entity-formation", "business-banking", "referral-program", "offer-finalization", "pre-launch", "analytics-setup", "content-cadence"\n' +
+        '  PRODUCT business: "product-pages", "supplier-lockdown", "inventory-system", "shop-integration", "fulfillment"\n' +
+        '  SERVICE business: "discovery-call-flow", "proposal-system", "client-onboarding", "delivery-system", "testimonials-collection"\n' +
+        '  COMMUNITY business: "community-landing", "member-onboarding", "engagement-rituals"\n' +
+        '  MULTI-INSTANCE (use distinct suffixed slugs): "first-drop-launch" / "next-drop" / "seasonal-drop"; "creator-seeding-wave-1" / "creator-seeding-wave-2"; "email-welcome" / "email-post-purchase" / "email-abandoned"; "paid-ads-tiktok" / "paid-ads-meta"; "outreach-warm" / "outreach-cold"\n\n' +
+        'EACH TASK MUST HAVE:\n' +
+        '- topic: kebab-slug from above OR clean kebab-slug for the outcome (UNIQUE within this milestone, NEVER matching a prior-topic slug)\n' +
+        '- title: 4-6 words plain English (NO jargon like "optimize / leverage / monetize / stack / funnel / scale / activate")\n' +
+        '- description: ONE plain-English sentence\n' +
+        '- steps: 3-5 specific actions. Name partner tools when relevant — at most ONE partner per task.\n\n' +
+        'Output ONLY a valid JSON object matching this schema. No markdown fences, no preamble:\n' + MILESTONE_TASKS_SCHEMA;
+    }
+
+    // Generate the N tasks for ONE milestone. taskCount controls how many.
+    // M1-M3 get 5 tasks each, M4-M6 get 4 — total 27 generated, ~20-24 after dedupe.
+    async function _generateMilestoneTasks(milestoneIdx, milestone, priorTopics, taskCount){
+      var system = _perMilestoneSystem(milestoneIdx, milestone, priorTopics, taskCount);
+      var user = contextBlock + '\n\nGenerate ' + taskCount + ' tasks for Milestone ' + milestoneIdx + ' ("' + (milestone.label || '') + '") now. The "topic" field on each task MUST NOT match any of the prior-topics above.';
+      // max_tokens scales with task count: 4 tasks ~1800, 5 tasks ~2200
+      var maxTok = taskCount >= 5 ? 2200 : 1800;
+      var resp = await callClaude(system, user, maxTok);
       var parsed = extractAndParseJSON(resp);
-      return (parsed && parsed.tasks) ? parsed.tasks : [];
+      if (!parsed || !Array.isArray(parsed.tasks)){
+        throw new Error('Could not parse milestone ' + milestoneIdx + ' tasks');
+      }
+      return parsed.tasks;
     }
-    function _withTaskTimeout(p, label){
+
+    // ========================================================================
+    // PARALLEL STAGE — 5 remaining sections + 6 task milestone calls.
+    // All 11 calls fire AT ONCE. Wall-clock = slowest single call (~70s for
+    // the offer section). Tasks no longer wait for offer/retention to finish
+    // because they run alongside them.
+    // ========================================================================
+
+    function _milestoneOnce(idx, milestone, topicsCovered, taskCount){
       return Promise.race([
-        p,
-        new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('TIMEOUT:' + label)); }, 45000); })
-      ]).catch(function(err){
-        console.warn('Tasks ' + label + ' failed:', err);
-        return [];
-      });
+        _generateMilestoneTasks(idx, milestone, topicsCovered, taskCount),
+        new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('TIMEOUT:m' + idx)); }, 45000); })
+      ]);
     }
-    var taskPromises = dash.scaling.milestones.slice(1).map(function(m, idx){
-      return _withTaskTimeout(_genTasksForMilestone(m, idx + 1), 'm' + (idx + 1));
-    });
-    var taskResults = await Promise.all(taskPromises);
-    taskResults.forEach(function(tasks, idx){
-      var ms = dash.scaling.milestones[idx + 1];
-      if (ms){
-        ms.tasks = (tasks || []).map(function(t){
-          if (typeof t.done === 'undefined') t.done = false;
-          if (!t.id) t.id = 'task-m' + (idx + 1) + '-' + Math.random().toString(36).slice(2,8);
-          return t;
+
+    async function _milestoneWithRetry(idx, milestone, topicsCovered, taskCount){
+      try {
+        return await _milestoneOnce(idx, milestone, topicsCovered, taskCount);
+      } catch (err1){
+        console.warn('[tasks] M' + idx + ' attempt 1 failed, retrying in 800ms:', err1 && err1.message);
+        await new Promise(function(r){ setTimeout(r, 800); });
+        try {
+          return await _milestoneOnce(idx, milestone, topicsCovered, taskCount);
+        } catch (err2){
+          console.warn('[tasks] M' + idx + ' attempt 2 failed; milestone left empty:', err2 && err2.message);
+          return [];
+        }
+      }
+    }
+
+    // Per-milestone task counts: M1, M2, M3 get 5 tasks each; M4, M5, M6 get 4.
+    // Total = 5+5+5+4+4+4 = 27 generated. After singleton dedupe drops ~3-7,
+    // typical final count lands at 20-24 tasks across the roadmap.
+    var TASK_COUNTS_PER_MILESTONE = [5, 5, 5, 4, 4, 4];
+
+    console.info('[build] step 2: firing 5 sections + ' + taskMilestones.length + ' task calls (27 tasks total) in parallel (' + (5 + taskMilestones.length) + ' concurrent)');
+    var _parallelStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+
+    // Bundle the 6 milestone task calls into one inner Promise.all so the
+    // outer Promise.all can treat them as a single result slot.
+    var taskCallsBundle = Promise.all(
+      taskMilestones.map(function(milestone, idx){
+        var milestoneIdx = idx + 1;
+        var taskCount = TASK_COUNTS_PER_MILESTONE[idx] || 4;
+        // priorTopics is empty in parallel mode — singleton dedupe runs below.
+        return _milestoneWithRetry(milestoneIdx, milestone, [], taskCount).then(function(tasks){
+          tasks.forEach(function(t, i){
+            if (!t.id) t.id = 'task-m' + milestoneIdx + '-' + i + '-' + Math.random().toString(36).slice(2,8);
+            if (typeof t.done === 'undefined') t.done = false;
+          });
+          console.info('[tasks] M' + milestoneIdx + ' done: ' + tasks.length + ' tasks [' + tasks.map(function(t){ return t.topic || t.title; }).join(', ') + ']');
+          return { idx: milestoneIdx, tasks: tasks };
         });
+      })
+    );
+
+    // Fire 5 sections + the task bundle all at the same time.
+    var parallelResults = await Promise.all([
+      _sectionWithTimeout('offer'),
+      _sectionWithTimeout('pricing'),
+      _sectionWithTimeout('buyer'),
+      _sectionWithTimeout('sales'),
+      _sectionWithTimeout('retention'),
+      taskCallsBundle
+    ]);
+
+    var _parallelElapsed = Math.round((((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - _parallelStart) / 100) / 10;
+    console.info('[build] parallel stage complete in ' + _parallelElapsed + 's wall-clock');
+
+    // Assemble dash from parallel results
+    var dash = {
+      offer:     parallelResults[0],
+      pricing:   parallelResults[1],
+      buyer:     parallelResults[2],
+      sales:     parallelResults[3],
+      retention: parallelResults[4],
+      scaling:   scalingResult
+    };
+
+    // If offer failed, bail with error — offer is the one critical section.
+    if (!dash.offer){
+      throw new Error('Could not generate the core offer — please retry.');
+    }
+
+    // Assign task results to their milestones
+    var taskResults = parallelResults[5];
+    taskResults.forEach(function(result){
+      if (dash.scaling.milestones[result.idx]){
+        dash.scaling.milestones[result.idx].tasks = result.tasks;
       }
     });
-    // Ensure Start has empty tasks
+
+    // Ensure Start (idx 0) always has empty tasks
     if (dash.scaling.milestones[0] && !Array.isArray(dash.scaling.milestones[0].tasks)){
       dash.scaling.milestones[0].tasks = [];
+    }
+
+    // ========================================================================
+    // POST-PROCESS — Smart cross-milestone singleton dedupe.
+    // Walks milestones in order. For each task, checks if its topic is a
+    // TRUE SINGLETON (entity-formation, supplier-lockdown, product-pages,
+    // etc. — outcomes that can only legitimately exist once per roadmap).
+    // If a singleton appears in 2+ milestones, drops all but the earliest.
+    // Non-singleton topics (drops over time, creator seeding waves, email
+    // sequences, paid ad platforms) flow through unchanged — those CAN
+    // legitimately appear multiple times across milestones.
+    // ========================================================================
+
+    var TRUE_SINGLETONS = {
+      // Universal — apply to all business models
+      'entity-formation': true,
+      'business-banking': true,
+      'referral-program': true,
+      'analytics-setup': true,
+      'offer-finalization': true,
+      'pre-launch': true,
+      'content-cadence': true,
+      // Product business
+      'product-pages': true,
+      'supplier-lockdown': true,
+      'inventory-system': true,
+      'shop-integration': true,
+      'fulfillment': true,
+      // Service business
+      'discovery-call-flow': true,
+      'proposal-system': true,
+      'client-onboarding': true,
+      'delivery-system': true,
+      'testimonials-collection': true,
+      // Community business
+      'community-landing': true,
+      'member-onboarding': true,
+      'engagement-rituals': true
+    };
+
+    function _canonicalSingleton(t){
+      if (!t) return null;
+      var slug = String(t.topic || '').trim().toLowerCase();
+      if (TRUE_SINGLETONS[slug]) return slug;
+      // Common alias slugs AI invents that map to the same canonical outcome
+      if (slug === 'llc-formation' || slug === 'business-formation' || slug === 'legal-business' || slug === 'form-llc') return 'entity-formation';
+      if (slug === 'business-bank-account' || slug === 'open-bank-account' || slug === 'open-business-bank') return 'business-banking';
+      if (slug === 'ambassador-program' || slug === 'word-of-mouth-system' || slug === 'customer-referral') return 'referral-program';
+      if (slug === 'storefront-build' || slug === 'product-page-setup' || slug === 'online-store-build') return 'product-pages';
+      if (slug === 'supplier-sourcing' || slug === 'vendor-lockdown') return 'supplier-lockdown';
+      return null; // not a singleton — let through unchanged
+    }
+
+    var seenSingletons = {};
+    dash.scaling.milestones.forEach(function(m, mIdx){
+      if (mIdx === 0 || !Array.isArray(m.tasks)) return;
+      m.tasks = m.tasks.filter(function(t){
+        var canon = _canonicalSingleton(t);
+        if (!canon) return true; // non-singleton, keep
+        if (seenSingletons[canon]){
+          console.info('[dedupe] dropped duplicate singleton "' + canon + '" from M' + mIdx + ' ("' + (t.title || '') + '")');
+          return false;
+        }
+        seenSingletons[canon] = true;
+        return true;
+      });
+    });
+
+    // ========================================================================
+    // POST-PROCESS — entity-formation title standardization.
+    // Find any entity-formation task, replace title with "Make [biz] a legal
+    // business", ensure it lives at front of M1. If user already has an LLC
+    // per Business Setup, drop the task entirely.
+    // ========================================================================
+
+    var _bizSetup = (window.State && window.State.answers && window.State.answers['business-setup']) || {};
+    var _entityStatus = String(_bizSetup.biz_entity || '').toLowerCase();
+    var _hasLLC = /\byes\b/.test(_entityStatus) && !/no/.test(_entityStatus);
+    var _bizName = (window.State && window.State.businessName) || _bizSetup.biz_name || 'your business';
+
+    function _isEntityFormationTask(t){
+      if (!t) return false;
+      var slug = String(t.topic || '').trim().toLowerCase();
+      var titleDesc = (String(t.title || '') + ' ' + String(t.description || '')).toLowerCase();
+      if (slug === 'entity-formation' || slug === 'llc-formation' || slug === 'business-formation') return true;
+      if (/(?:\bllc\b|\bentity\b|incorporat|business[\s-]?formation|register[\s-]?your[\s-]?business|legal[\s-]?business|form[\s-]?your[\s-]?(?:llc|business|entity)|file[\s-]?your[\s-]?llc|articles[\s-]?of[\s-]?organization)/.test(titleDesc + ' ' + slug)) return true;
+      return false;
+    }
+
+    var _entityTask = null;
+    dash.scaling.milestones.forEach(function(m, mIdx){
+      if (mIdx === 0 || !Array.isArray(m.tasks)) return;
+      for (var i = 0; i < m.tasks.length; i++){
+        if (_isEntityFormationTask(m.tasks[i])){
+          _entityTask = m.tasks[i];
+          m.tasks.splice(i, 1);
+          return;
+        }
+      }
+    });
+
+    if (_entityTask){
+      if (_hasLLC){
+        console.info('[entity] user has LLC — dropped entity-formation task entirely');
+      } else {
+        _entityTask.title = 'Make ' + _bizName + ' a legal business';
+        var m1 = dash.scaling.milestones[1];
+        if (m1){
+          if (!Array.isArray(m1.tasks)) m1.tasks = [];
+          // Push to FRONT of M1 — entity formation is the first thing to do.
+          m1.tasks.unshift(_entityTask);
+          // Trim M1 back to max 4 tasks
+          if (m1.tasks.length > 4) m1.tasks = m1.tasks.slice(0, 4);
+        }
+      }
+    }
+
+  // ==========================================================================
+  // POOL & REDISTRIBUTE — even out tasks across all 6 milestones.
+  // The AI generates 27 (5+5+5+4+4+4) then singleton dedupe drops some.
+  // After dedupe we have an uneven mix (e.g., M1=5, M4=2). This pass pools
+  // every task in milestone order, then re-slices the pool into 6 chunks
+  // sized as evenly as possible. Guarantees no milestone is far emptier than
+  // others, and no milestone has 5+ when others have 2.
+  //
+  // Distribution math: base = floor(total/6), extra = total % 6. The first
+  // `extra` milestones get base+1 tasks, the rest get base. So 20 tasks land
+  // as [4,4,3,3,3,3], 22 as [4,4,4,4,3,3], 24 as [4,4,4,4,4,4].
+  // ==========================================================================
+  if (dash.scaling && Array.isArray(dash.scaling.milestones) && dash.scaling.milestones.length > 1){
+    var pooledTasks = [];
+    for (var pIdx = 1; pIdx < dash.scaling.milestones.length; pIdx++){
+      var pm = dash.scaling.milestones[pIdx];
+      if (pm && Array.isArray(pm.tasks)){
+        pooledTasks = pooledTasks.concat(pm.tasks);
+        pm.tasks = [];
+      }
+    }
+    var totalPooled = pooledTasks.length;
+    var milestoneSlots = dash.scaling.milestones.length - 1;
+    if (totalPooled > 0 && milestoneSlots > 0){
+      var basePer = Math.floor(totalPooled / milestoneSlots);
+      var extraSlots = totalPooled % milestoneSlots;
+      var cursor = 0;
+      var finalCounts = [];
+      for (var rIdx = 1; rIdx <= milestoneSlots; rIdx++){
+        var chunkSize = basePer + ((rIdx - 1) < extraSlots ? 1 : 0);
+        var chunk = pooledTasks.slice(cursor, cursor + chunkSize);
+        dash.scaling.milestones[rIdx].tasks = chunk;
+        cursor += chunkSize;
+        finalCounts.push(chunk.length);
+      }
+      console.info('[balance] redistributed ' + totalPooled + ' tasks evenly: [' + finalCounts.join(', ') + ']');
     }
   }
 
@@ -12801,6 +12956,18 @@ async function startAITrack(){
 }
 
 async function finishAITrack(){
+  // In-flight guard: if a build is already running, ignore the call.
+  // Without this, a user double-clicking "Try Again" launches two pipelines
+  // that race each other — doubling load and making perceived wait time worse.
+  // ALSO checks the other build paths' flags (auto-build via _renderDashboardTab,
+  // backfill via _ensureDashboardComplete) so we never have two dashboard
+  // builds running concurrently regardless of which entry point started first.
+  if (window._finishInFlight || State._buildInFlight || State._backfillInFlight){
+    console.warn('[finishAITrack] another build path already in flight — ignoring duplicate call');
+    return;
+  }
+  window._finishInFlight = true;
+
   showLoaderWithMessages([
     'Building your offer stack...',
     'Calculating pricing strategy and market context...',
@@ -12810,14 +12977,26 @@ async function finishAITrack(){
     'Finalizing your dashboard...'
   ]);
 
+  // Hard 300s outer cap: matches the new worst-case math after bumping section
+  // timeout from 60s → 90s. Sections worst case = 90s × 2 retries + 0.8s = ~181s.
+  // Tasks worst case = 45s × 2 retries + 0.8s = ~91s. Sequential stages = ~272s.
+  // 300s gives a small safety buffer beyond that. Healthy builds finish in
+  // 40-65s — the cap only fires when something is genuinely stuck.
+  function _outerCap(promise){
+    return Promise.race([
+      promise,
+      new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('Generation took too long. Please try again.')); }, 300000); })
+    ]);
+  }
+
   try {
-    var dash = await generatePersonalizedDashboard(
+    var dash = await _outerCap(generatePersonalizedDashboard(
       State.answers.selling || {},
       State.sellingBranch,
       State.aiQuestions,
       State.answers['ai-volume'] || {},
       State.assignedTrack
-    );
+    ));
 
     // Validate basic shape
     if (!dash || !dash.offer){
@@ -12835,7 +13014,18 @@ async function finishAITrack(){
         includes: t.includes || [],
         excluded: t.excluded || [],
         bestFor: t.bestFor || '',
-        recommended: !!t.recommended
+        recommended: !!t.recommended,
+        // Rich fields that the deep-tier modal renders — promises/bonuses/
+        // marketing/urgency/objections/salesMath. These were being SILENTLY
+        // DROPPED by this normalizer before, which is why the modal showed
+        // only the basic fields (name/price/includes/excluded/bestFor) even
+        // though the AI was returning the full structured data.
+        promises:   Array.isArray(t.promises) ? t.promises : [],
+        bonuses:    Array.isArray(t.bonuses) ? t.bonuses : [],
+        marketing:  t.marketing || null,
+        urgency:    t.urgency || null,
+        objections: Array.isArray(t.objections) ? t.objections : [],
+        salesMath:  t.salesMath || null
       };
     });
 
@@ -12858,10 +13048,61 @@ async function finishAITrack(){
     stopLoader();
     showComplete();
   } catch (e){
+    console.error('[finishAITrack] dashboard build failed after retry:', e);
     stopLoader();
-    document.getElementById('form-card').hidden = false;
-    showError('Could not build your dashboard: ' + e.message);
+    // Replace the loader card with a dedicated recovery screen instead of
+    // dumping the user back at the last question with a 8-second toast.
+    // Both buttons here are visible, persistent, and self-contained so
+    // nobody has to console-debug their way out of a failed build.
+    _showBuildFailedScreen(e && e.message ? e.message : 'Unknown error.');
+  } finally {
+    window._finishInFlight = false;
   }
+}
+
+// Recovery screen shown when the dashboard build fails. Replaces the loader
+// + form card with a single coherent error view that has two clear ways out:
+// retry the build, or wipe and start the questionnaire over.
+function _showBuildFailedScreen(reason){
+  var loader = document.getElementById('loader-card');
+  var form   = document.getElementById('form-card');
+  if (form)   form.hidden   = true;
+  if (loader) loader.hidden = true;
+
+  // Stand up an inline error card next to the loader (creates one on first use).
+  var errCard = document.getElementById('build-failed-card');
+  if (!errCard){
+    errCard = document.createElement('div');
+    errCard.id = 'build-failed-card';
+    errCard.className = 'loader-card';
+    var parent = (loader && loader.parentNode) || (form && form.parentNode) || document.body;
+    parent.appendChild(errCard);
+  }
+  errCard.hidden = false;
+  errCard.innerHTML =
+    '<div style="text-align:center; max-width:540px; margin:0 auto; padding:40px 24px;">' +
+      '<div style="font-family:var(--serif-display); font-size:24px; color:var(--gold-1); margin-bottom:14px;">We couldn\'t build your roadmap.</div>' +
+      '<div style="color:var(--smoke); font-family:var(--serif-body); font-size:16px; line-height:1.55; margin-bottom:28px;">' +
+        'The AI was slower than expected or returned an incomplete response. Your answers are saved — you can try the build again, or start fresh from the questions.' +
+      '</div>' +
+      (reason ? '<div style="color:var(--smoke); font-family:var(--sans); font-size:11px; letter-spacing:.15em; text-transform:uppercase; margin-bottom:24px; opacity:.7;">Detail: ' + escapeHtml(reason) + '</div>' : '') +
+      '<div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">' +
+        '<button class="btn-gold btn-sm" id="_build-failed-retry" type="button">Try Again</button>' +
+        '<button class="btn-ghost btn-sm" id="_build-failed-restart" type="button">Start Over From Questions</button>' +
+      '</div>' +
+    '</div>';
+  errCard.scrollIntoView({ behavior:'smooth', block:'center' });
+
+  document.getElementById('_build-failed-retry').addEventListener('click', function(){
+    errCard.hidden = true;
+    finishAITrack();
+  });
+  document.getElementById('_build-failed-restart').addEventListener('click', function(){
+    // Use the existing _doStartOver — it physically deletes the user_roadmaps
+    // row, resets in-memory state, and re-routes to the first question.
+    errCard.hidden = true;
+    if (typeof _doStartOver === 'function') _doStartOver();
+  });
 }
 
 // =====================================================
@@ -12925,7 +13166,17 @@ renderForm = function(){
       ta.style.minHeight = '90px';
     }
     ta.value = answers[q.id] || '';
-    ta.addEventListener('input', function(){ answers[q.id] = ta.value; if (typeof saveRoadmap === 'function') saveRoadmap(); });
+    ta.addEventListener('input', function(){
+      answers[q.id] = ta.value;
+      // Live-update the brand identity bar as the user types their business name
+      // during the business-setup questionnaire. State.businessName is what
+      // _updateBrandIdentity reads — keep it synced on every keystroke.
+      if (q.id === 'biz_name'){
+        State.businessName = ta.value;
+        if (typeof window._updateBrandIdentity === 'function') window._updateBrandIdentity();
+      }
+      if (typeof saveRoadmap === 'function') saveRoadmap();
+    });
     qEl.appendChild(ta);
     setTimeout(function(){ ta.focus(); }, 80);
   } else if (q.type === 'multiple_choice' || q.type === 'choice'){

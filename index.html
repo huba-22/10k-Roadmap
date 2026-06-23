@@ -39,6 +39,10 @@
   /* === Soft azure accent (subtle, used sparingly) === */
   --azure:#8fa8be;
 
+  /* Tooltip / popover accent — varies per theme (Heritage = navy, others = brass).
+     Default falls back to gold-3 brown for Walnut, Forest, and Mauve. */
+  --tooltip-accent:var(--gold-3);
+
   --serif-display:'Cinzel','Cormorant Garamond',serif;
   --serif-body:'Cormorant Garamond',serif;
   --sans:'Montserrat',-apple-system,system-ui,sans-serif;
@@ -68,6 +72,8 @@
   --ink:#1d281d;
   --ink-line:rgba(160,134,96,.20);
   --ink-line-strong:rgba(201,178,145,.38);
+  /* Tooltip accent overridden to forest green to match the theme */
+  --tooltip-accent:#4a6b4a;
 }
 
 /* Mauve — warm modern chestnut, brown-tinged rather than purple-tinged */
@@ -78,6 +84,8 @@
   --ink:#4a3128;
   --ink-line:rgba(186,148,128,.26);
   --ink-line-strong:rgba(212,180,158,.42);
+  /* Tooltip accent overridden to dusty rose-mauve to match the theme */
+  --tooltip-accent:#8e5e6e;
 }
 
 /* Heritage — deep navy backbone, brass-on-navy yacht club */
@@ -92,6 +100,8 @@
   --gold-1:#dcc9a8;
   --gold-2:#a98e68;
   --gold-3:#7e6645;
+  /* Tooltip accent overridden to navy so the hover label border matches the theme */
+  --tooltip-accent:var(--navy-1);
 }
 
 /* Walnut explicit — same as :root, lets users "switch back" cleanly */
@@ -1957,27 +1967,25 @@ em{
 }
 .oe-review-math{
   display:grid; grid-template-columns:repeat(3, 1fr);
-  gap:12px; margin-top:12px;
+  gap:14px; margin-top:12px;
 }
 .oe-review-math-cell{
   text-align:center;
-  padding:14px 10px;
-  background:var(--obsidian-2);
-  border:1px solid var(--ink-line);
-  border-radius:8px;
+  padding:18px 10px;
+  background:linear-gradient(180deg, var(--obsidian-3), var(--obsidian-2));
+  border:1px solid var(--ink-line-strong);
+  border-radius:var(--radius-lg);
+  box-shadow:0 1px 2px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.03);
 }
 .oe-review-math-num{
-  font-family:var(--serif-display); font-size:24px;
+  font-family:var(--serif-display); font-size:28px;
   color:var(--gold-1); font-weight:600;
+  line-height:1;
 }
 .oe-review-math-label{
   font-family:var(--sans); font-size:9px; letter-spacing:.3em;
   text-transform:uppercase; color:var(--smoke);
-  margin-top:6px;
-}
-.oe-review-math-note{
-  font-family:var(--sans); font-size:12px; color:var(--smoke);
-  font-style:italic; margin-top:10px; text-align:center;
+  margin-top:8px;
 }
 
 /* ---- Custom add row inside dropdowns section ---- */
@@ -2902,9 +2910,9 @@ body.signed-in .scroll-cue{display:none !important}
 }
 .scaling-tooltip{
   position:absolute;
-  background:var(--obsidian);
-  border:1px solid var(--gold-3);
-  border-radius:var(--radius-sm);
+  background:linear-gradient(180deg, var(--obsidian-3), var(--obsidian-2));
+  border:1px solid var(--ink-line);
+  border-radius:var(--radius-lg);
   padding:14px 18px;
   max-width:280px;
   font-family:var(--sans); font-size:12px;
@@ -4241,9 +4249,9 @@ if (!window._tooltipDismissalInstalled){
 }
 .scaling-tooltip{
   position:absolute;
-  background:linear-gradient(180deg, rgba(20,15,10,.97), rgba(12,8,5,.97));
-  border:1px solid var(--gold-3);
-  border-radius:8px;
+  background:linear-gradient(180deg, var(--obsidian-3), var(--obsidian-2));
+  border:1px solid var(--ink-line);
+  border-radius:var(--radius-lg);
   padding:12px 16px;
   min-width:auto; max-width:260px;
   pointer-events:none;
@@ -4501,9 +4509,9 @@ if (!window._tooltipDismissalInstalled){
 
 .roadmap-popover{
   position:absolute;
-  background:linear-gradient(180deg, rgba(20,15,10,.97), rgba(12,8,5,.97));
-  border:1px solid var(--gold-3);
-  border-radius:10px;
+  background:linear-gradient(180deg, var(--obsidian-3), var(--obsidian-2));
+  border:1px solid var(--ink-line);
+  border-radius:var(--radius-lg);
   padding:16px 20px;
   max-width:280px;
   z-index:10;
@@ -8104,7 +8112,6 @@ function _renderModalSalesMath(o){
       '<div class="oe-review-math-cell"><div class="oe-review-math-num">' + escapeHtml(String(sm.perWeek || '—')) + '</div><div class="oe-review-math-label">per week</div></div>' +
       '<div class="oe-review-math-cell"><div class="oe-review-math-num">' + escapeHtml(String(sm.perDay || '—')) + '</div><div class="oe-review-math-label">per day</div></div>' +
     '</div>' +
-    (sm.note ? '<div class="oe-review-math-note">' + escapeHtml(sm.note) + '</div>' : '') +
   '</div>';
 }
 
@@ -8230,6 +8237,10 @@ function openSingleOfferModal(individualOffer){
         '<span class="single-offer-price">' + escapeHtml(o.price) + '</span>' +
         '<span class="single-offer-freq">' + escapeHtml(o.freq || 'one-time') + '</span>' +
       '</div>' +
+      // Sales math moved up here — directly under the price — so the viability
+      // story ("213 to $10K, 54/week, 7/day") anchors the price the moment a
+      // buyer reads it, instead of being buried at the bottom of the modal.
+      _renderModalSalesMath(o) +
       (o.bestFor ? '<div class="single-offer-bestfor"><span class="single-offer-bestfor-label">Best for:</span> ' + escapeHtml(o.bestFor) + '</div>' : '') +
       (includesHtml
         ? '<div class="single-offer-section"><div class="single-offer-section-head">What\'s included</div><ul class="single-offer-includes">' + includesHtml + '</ul></div>'
@@ -8242,7 +8253,6 @@ function openSingleOfferModal(individualOffer){
       _renderModalMarketing(o) +
       _renderModalUrgency(o) +
       _renderModalObjections(o) +
-      _renderModalSalesMath(o) +
     '</div>';
   document.getElementById('offer-modal').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -9295,8 +9305,7 @@ function _renderReviewBody(o){
         '<div class="oe-review-math-cell"><div class="oe-review-math-num">' + escapeHtml(String(o.salesMath.salesToGoal || '—')) + '</div><div class="oe-review-math-label">to $10K</div></div>' +
         '<div class="oe-review-math-cell"><div class="oe-review-math-num">' + escapeHtml(String(o.salesMath.perWeek || '—')) + '</div><div class="oe-review-math-label">per week</div></div>' +
         '<div class="oe-review-math-cell"><div class="oe-review-math-num">' + escapeHtml(String(o.salesMath.perDay || '—')) + '</div><div class="oe-review-math-label">per day</div></div>' +
-      '</div>' +
-      (o.salesMath.note ? '<div class="oe-review-math-note">' + escapeHtml(o.salesMath.note) + '</div>' : '');
+      '</div>';
   }
 
   mount.innerHTML = '<div class="oe-review">' +

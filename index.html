@@ -12604,15 +12604,14 @@ async function generatePersonalizedDashboard(sellingAnswers, branch, aiQuestions
         '- "Set up Instagram bio" + "Set up TikTok bio" = SAME outcome (social bio setup). ONE task covering both platforms.\n' +
         '- "Set up welcome email" + "Set up post-purchase email" = DIFFERENT outcomes — BOTH belong if they fit this phase.\n\n' +
         'PER-TASK FOCUS:\n' +
-        '- Each task = ONE outcome with 3-5 concrete steps.\n' +
+        '- Each task = ONE outcome with 3-4 concrete steps (never more than 4).\n' +
         '- Mention AT MOST ONE partner tool per task.\n' +
         '- Steps focus on completing the task itself, not on selling adjacent platforms.\n\n' +
-        'STEP WRITING STYLE — task-forward, action-led, no padding:\n' +
-        '- Each step STARTS with an action verb (Set up, Build, Write, Send, Track, Open, Lock in, Post, Film, Confirm, etc.).\n' +
-        '- One step = ONE clean sentence, max ~20 words. No semicolons, no "and ... and ..." chains, no parenthetical sub-clauses.\n' +
-        '- Keep the SPECIFIC tool, number, or tactical detail (e.g. "Set up a 3-message follow-up in HighLevel"). Skip the "why" reasoning — the description covers that.\n' +
-        '- Drop all editorial padding: never use "so that...", "in order to...", "this helps you...", "which means...", "ensuring...".\n' +
-        '- If an action needs more than ~20 words to describe, split it into TWO steps.\n\n' +
+        'STEP WRITING STYLE — keep the meat, trim the filler:\n' +
+        '- Each step names the ACTION + the TOOL/SPECIFIC. Examples, scripts, specific numbers, and tactical details stay — that\'s the meat.\n' +
+        '- Drop trailing "...so that..." meta-explanations of why the step matters (the description already covers the why).\n' +
+        '- Avoid stacking 2-3 separate actions in one step with "and...and..." chains — split into separate steps if they\'re separate actions.\n' +
+        '- One step = one focused action with enough specificity that a beginner knows exactly what to click/say/build.\n\n' +
         'BUSINESS SETUP — Respect what the user already has:\n' +
         'If BUSINESS SETUP says "Yes" to having an LLC, website, referral program, social strategy, follow-up system, etc., SKIP that topic entirely — it\'s done.\n\n' +
         'TOOL PREFERENCES — Always recommend OUR partner tools, NEVER name a competitor:\n' +
@@ -12633,7 +12632,7 @@ async function generatePersonalizedDashboard(sellingAnswers, branch, aiQuestions
         '- topic: kebab-slug from above OR clean kebab-slug for the outcome (UNIQUE within this milestone, NEVER matching a prior-topic slug)\n' +
         '- title: 4-6 words plain English (NO jargon like "optimize / leverage / monetize / stack / funnel / scale / activate")\n' +
         '- description: ONE plain-English sentence\n' +
-        '- steps: 3-5 specific actions. Name partner tools when relevant — at most ONE partner per task.\n\n' +
+        '- steps: 3-4 specific actions (never more than 4). Name partner tools when relevant — at most ONE partner per task.\n\n' +
         'Output ONLY a valid JSON object matching this schema. No markdown fences, no preamble:\n' + MILESTONE_TASKS_SCHEMA;
     }
 
@@ -12642,8 +12641,9 @@ async function generatePersonalizedDashboard(sellingAnswers, branch, aiQuestions
     async function _generateMilestoneTasks(milestoneIdx, milestone, priorTopics, taskCount){
       var system = _perMilestoneSystem(milestoneIdx, milestone, priorTopics, taskCount);
       var user = contextBlock + '\n\nGenerate ' + taskCount + ' tasks for Milestone ' + milestoneIdx + ' ("' + (milestone.label || '') + '") now. The "topic" field on each task MUST NOT match any of the prior-topics above.';
-      // max_tokens scales with task count: 4 tasks ~1800, 5 tasks ~2200
-      var maxTok = taskCount >= 5 ? 2200 : 1800;
+      // max_tokens 1800: 4 tasks × ~300-450 tokens each (richer "meat & potatoes"
+      // steps now allowed) = ~1600. 1800 leaves breathing room.
+      var maxTok = 1800;
       var resp = await callClaude(system, user, maxTok);
       var parsed = extractAndParseJSON(resp);
       if (!parsed || !Array.isArray(parsed.tasks)){
@@ -12681,12 +12681,13 @@ async function generatePersonalizedDashboard(sellingAnswers, branch, aiQuestions
       }
     }
 
-    // Per-milestone task counts: M1, M2, M3 get 5 tasks each; M4, M5, M6 get 4.
-    // Total = 5+5+5+4+4+4 = 27 generated. After singleton dedupe drops ~3-7,
-    // typical final count lands at 20-24 tasks across the roadmap.
-    var TASK_COUNTS_PER_MILESTONE = [5, 5, 5, 4, 4, 4];
+    // Per-milestone task counts: each milestone asks for 4 tasks.
+    // Total = 24 generated. After singleton dedupe drops ~2-5, the pool &
+    // redistribute pass spreads them evenly across all 6 milestones — typical
+    // final distribution is 4-4-4-4-3-3 or similar.
+    var TASK_COUNTS_PER_MILESTONE = [4, 4, 4, 4, 4, 4];
 
-    console.info('[build] step 2: firing 5 sections + ' + taskMilestones.length + ' task calls (27 tasks total) in parallel (' + (5 + taskMilestones.length) + ' concurrent)');
+    console.info('[build] step 2: firing 5 sections + ' + taskMilestones.length + ' task calls (24 tasks total) in parallel (' + (5 + taskMilestones.length) + ' concurrent)');
     var _parallelStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
     // Bundle the 6 milestone task calls into one inner Promise.all so the
